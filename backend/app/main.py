@@ -11,6 +11,7 @@ import base64, difflib, re
 
 import jwt
 import httpx
+from cryptography.fernet import Fernet
 from PIL import Image, ImageOps, UnidentifiedImageError
 from argon2 import PasswordHasher
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, UploadFile, File
@@ -50,6 +51,22 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True),nullable=True)
+class GoogleAccount(Base):
+    __tablename__ = "google_accounts"
+    __table_args__ = (UniqueConstraint("provider_subject", name="uq_google_account_subject"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    provider_subject: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str] = mapped_column(String(320))
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class GoogleOAuthState(Base):
+    __tablename__ = "google_oauth_states"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    nonce: Mapped[str] = mapped_column(String(128))
+    code_verifier: Mapped[str] = mapped_column(String(128))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 class Food(Base):
     __tablename__ = "foods"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -230,6 +247,8 @@ class ScanCandidateIn(BaseModel): name:str=Field(min_length=1,max_length=160);gr
 class ScanConfirmItemIn(BaseModel): candidate_id:str|None=Field(default=None,max_length=64);food_id:int;grams:float=Field(gt=0,le=10000,allow_inf_nan=False);portion_label:str|None=Field(default=None,max_length=100)
 class ScanConfirmIn(BaseModel): name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*");meal_type:str=Field(pattern="^(breakfast|lunch|dinner|snack)$");items:list[ScanConfirmItemIn]=Field(max_length=50);removed_candidate_ids:list[str]=Field(default_factory=list,max_length=12)
 class DeleteAccountIn(BaseModel): password:str=Field(min_length=1,max_length=128); confirmation:str
+class GoogleLinkIn(BaseModel): password:str=Field(min_length=1,max_length=128)
+class GoogleUnlinkIn(BaseModel): password:str=Field(min_length=1,max_length=128)
 class ProfileIn(BaseModel): name:str|None=Field(default=None,min_length=1,max_length=100); goals:dict[str,float]|None=None
 class PreferencesIn(BaseModel):
     diet:str=Field(min_length=1,max_length=40,pattern=r".*\S.*")
@@ -271,11 +290,25 @@ def enforce_rate_limit(s:Session,scope:str,subject:str,limit:int,window_seconds:
 def request_ip(request:Request)->str:
     return request.client.host if request.client else "unknown"
 
+def google_oauth_configured()->bool:
+    return all(os.getenv(name) for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"))
+
+def oauth_secret_box()->Fernet:
+    key=base64.urlsafe_b64encode(hashlib.sha256(("lossfit-google-oauth:"+JWT_SECRET).encode()).digest())
+    return Fernet(key)
+
+def verify_google_id_token(raw_token:str, audience:str)->dict:
+    from google.auth.transport.requests import Request as GoogleRequest
+    from google.oauth2 import id_token
+    return id_token.verify_oauth2_token(raw_token, GoogleRequest(), audience)
+
 app=FastAPI(title="LossFit API",version="0.1.0")
 if os.getenv("ENVIRONMENT")=="production" and (len(JWT_SECRET)<32 or JWT_SECRET=="local-only-change-this-secret-before-deploying"):
     raise RuntimeError("Production requires a unique JWT_SECRET of at least 32 characters")
 if os.getenv("ENVIRONMENT")=="production" and len(os.getenv("DELETION_LEDGER_SECRET",""))<32:
     raise RuntimeError("Production requires a stable DELETION_LEDGER_SECRET of at least 32 characters")
+if os.getenv("ENVIRONMENT")=="production" and google_oauth_configured() and not os.environ["GOOGLE_REDIRECT_URI"].lower().startswith("https://"):
+    raise RuntimeError("Production Google OAuth requires an HTTPS redirect URI")
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(","),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Authorization","Content-Type","X-CSRF-Token"])
 @app.middleware("http")
 async def csrf_protection(request:Request,call_next):
@@ -387,6 +420,63 @@ def logout(request:Request,response:Response,s:Session=Depends(db)):
     response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
 @app.get("/api/v1/auth/me")
 def me(u:User=Depends(current_user)): return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
+@app.get("/api/v1/auth/google/status")
+def google_status(s:Session=Depends(db),u:User=Depends(current_user)):
+    linked=s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==u.id))
+    return {"available":google_oauth_configured(),"linked":bool(linked),"email":linked.email if linked else None}
+@app.post("/api/v1/auth/google/link/start")
+def google_link_start(data:GoogleLinkIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    enforce_rate_limit(s,"google_link_start_user",str(u.id),5,3600)
+    if not google_oauth_configured():raise HTTPException(503,"Google account linking is not configured")
+    try:verified=hasher.verify(u.password_hash,data.password)
+    except Exception:verified=False
+    if not verified:raise HTTPException(401,"Reauthentication failed")
+    if s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==u.id)):raise HTTPException(409,"A Google account is already linked")
+    now=datetime.now(timezone.utc)
+    s.execute(delete(GoogleOAuthState).where(or_(GoogleOAuthState.expires_at<=now,GoogleOAuthState.consumed_at.is_not(None))))
+    raw_state=secrets.token_urlsafe(32);nonce=secrets.token_urlsafe(32);verifier=secrets.token_urlsafe(48)
+    state=GoogleOAuthState(state_hash=token_hash(raw_state),user_id=u.id,nonce=nonce,code_verifier=oauth_secret_box().encrypt(verifier.encode()).decode(),expires_at=now+timedelta(minutes=10))
+    s.add(state);s.commit()
+    challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    from urllib.parse import urlencode
+    params={"client_id":os.environ["GOOGLE_CLIENT_ID"],"redirect_uri":os.environ["GOOGLE_REDIRECT_URI"],"response_type":"code","scope":"openid email profile","state":raw_state,"nonce":nonce,"code_challenge":challenge,"code_challenge_method":"S256","prompt":"select_account"}
+    return {"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(params)}
+@app.get("/api/v1/auth/google/callback")
+def google_link_callback(code:str|None=Query(default=None,max_length=2048),state:str|None=Query(default=None,min_length=32,max_length=128),error:str|None=Query(default=None,max_length=128),s:Session=Depends(db)):
+    front=os.getenv("APP_BASE_URL","http://127.0.0.1:5173").rstrip("/")+"/settings/accounts"
+    def finish(result:str):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(front+"?google="+result,status_code=303)
+    if not state:return finish("invalid")
+    now=datetime.now(timezone.utc);entry=s.scalar(select(GoogleOAuthState).where(GoogleOAuthState.state_hash==token_hash(state)).with_for_update())
+    if not entry or entry.consumed_at or entry.expires_at<=now:return finish("invalid")
+    entry.consumed_at=now;s.commit()
+    if error or not code:return finish("cancelled" if error=="access_denied" else "failed")
+    if not google_oauth_configured():return finish("unavailable")
+    try:
+        verifier=oauth_secret_box().decrypt(entry.code_verifier.encode()).decode()
+        response=httpx.post("https://oauth2.googleapis.com/token",data={"code":code,"client_id":os.environ["GOOGLE_CLIENT_ID"],"client_secret":os.environ["GOOGLE_CLIENT_SECRET"],"redirect_uri":os.environ["GOOGLE_REDIRECT_URI"],"grant_type":"authorization_code","code_verifier":verifier},timeout=10)
+        response.raise_for_status();payload=response.json();claims=verify_google_id_token(payload["id_token"],os.environ["GOOGLE_CLIENT_ID"])
+    except Exception:return finish("failed")
+    subject=claims.get("sub");email=claims.get("email")
+    if claims.get("nonce")!=entry.nonce or not isinstance(subject,str) or not subject or len(subject)>255 or claims.get("email_verified") is not True or not isinstance(email,str) or not email or len(email)>320:
+        return finish("failed")
+    existing=s.scalar(select(GoogleAccount).where(GoogleAccount.provider_subject==subject))
+    account=s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==entry.user_id))
+    if existing and existing.user_id!=entry.user_id:return finish("conflict")
+    if account and account.provider_subject!=subject:return finish("conflict")
+    if not existing and not account:
+        s.add(GoogleAccount(user_id=entry.user_id,provider_subject=subject,email=email.lower()))
+        s.commit()
+    return finish("linked")
+@app.post("/api/v1/auth/google/unlink")
+def google_unlink(data:GoogleUnlinkIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    try:verified=hasher.verify(u.password_hash,data.password)
+    except Exception:verified=False
+    if not verified:raise HTTPException(401,"Reauthentication failed")
+    account=s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==u.id))
+    if not account:raise HTTPException(404,"No Google account is linked")
+    s.delete(account);s.commit();return {"linked":False}
 @app.post("/api/v1/users/onboarding")
 def onboarding(data:OnboardingIn,s:Session=Depends(db),u:User=Depends(current_user)):
     try: ZoneInfo(data.timezone)

@@ -15,6 +15,7 @@ import { ForgotPasswordPage, ResetPasswordPage } from './PasswordPages';
 import { AnalyticsPage, FoodLogPage } from './AnalyticsPages';
 import { ScannerPage, ScannerReviewPage } from './ScanPages';
 import LearningPage from './LearningPage';
+import ConnectedAccountsPage from './ConnectedAccountsPage';
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -75,7 +76,7 @@ function App(){return <Shell><Routes>
   <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
   <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
   <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
-  <Route path="/profile" element={<ProfilePage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/><Route path="*" element={<NotFound/>}/>
+  <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/><Route path="*" element={<NotFound/>}/>
 </Routes></Shell>}
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><BrowserRouter><App/></BrowserRouter></React.StrictMode>);

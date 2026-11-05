@@ -41,6 +41,68 @@ def test_cookie_mutations_require_csrf_and_origin():
         good=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
         assert good.status_code==200 and good.json()['access_token']
 
+def test_google_account_linking_reports_missing_credentials_and_requires_reauthentication(monkeypatch):
+    monkeypatch.delenv('GOOGLE_CLIENT_ID',raising=False);monkeypatch.delenv('GOOGLE_CLIENT_SECRET',raising=False);monkeypatch.delenv('GOOGLE_REDIRECT_URI',raising=False)
+    with TestClient(app) as client:
+        register(client)
+        csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        assert client.get('/api/v1/auth/google/status').json()=={"available":False,"linked":False,"email":None}
+        unavailable=client.post('/api/v1/auth/google/link/start',headers=headers,json={"password":"safe-password-987"})
+        assert unavailable.status_code==503
+        monkeypatch.setenv('GOOGLE_CLIENT_ID','test-client.apps.googleusercontent.com');monkeypatch.setenv('GOOGLE_CLIENT_SECRET','test-secret');monkeypatch.setenv('GOOGLE_REDIRECT_URI','http://127.0.0.1:8000/api/v1/auth/google/callback')
+        bad=client.post('/api/v1/auth/google/link/start',headers=headers,json={"password":"wrong-password"})
+        assert bad.status_code==401
+
+def test_google_account_linking_uses_pkce_verified_subject_and_single_use_state(monkeypatch):
+    from urllib.parse import urlparse,parse_qs
+    monkeypatch.setenv('GOOGLE_CLIENT_ID','test-client.apps.googleusercontent.com');monkeypatch.setenv('GOOGLE_CLIENT_SECRET','test-secret');monkeypatch.setenv('GOOGLE_REDIRECT_URI','http://127.0.0.1:8000/api/v1/auth/google/callback')
+    token_payload={"id_token":"mock-signed-token"};calls=[]
+    class FakeResponse:
+        def raise_for_status(self):pass
+        def json(self):return token_payload
+    def fake_post(url,**kwargs):calls.append((url,kwargs));return FakeResponse()
+    monkeypatch.setattr(main.httpx,'post',fake_post)
+    with TestClient(app) as client:
+        register(client)
+        headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        started=client.post('/api/v1/auth/google/link/start',headers=headers,json={"password":"safe-password-987"})
+        assert started.status_code==200
+        params=parse_qs(urlparse(started.json()['authorization_url']).query)
+        assert params['code_challenge_method']==['S256'] and params['scope']==['openid email profile']
+        monkeypatch.setattr(main,'verify_google_id_token',lambda raw,audience:{"sub":"google-sub-123","email":"different-address@example.com","email_verified":True,"nonce":params['nonce'][0]})
+        callback=client.get('/api/v1/auth/google/callback',params={"state":params['state'][0],"code":"oauth-code"},follow_redirects=False)
+        assert callback.status_code==303 and callback.headers['location'].endswith('/settings/accounts?google=linked')
+        assert calls[0][1]['data']['code_verifier']
+        assert client.get('/api/v1/auth/google/status').json()=={"available":True,"linked":True,"email":"different-address@example.com"}
+        replay=client.get('/api/v1/auth/google/callback',params={"state":params['state'][0],"code":"another-code"},follow_redirects=False)
+        assert replay.headers['location'].endswith('?google=invalid') and len(calls)==1
+        wrong_password=client.post('/api/v1/auth/google/unlink',headers=headers,json={"password":"wrong-password"})
+        assert wrong_password.status_code==401
+        unlinked=client.post('/api/v1/auth/google/unlink',headers=headers,json={"password":"safe-password-987"})
+        assert unlinked.status_code==200 and client.get('/api/v1/auth/google/status').json()['linked'] is False
+
+def test_google_link_never_merges_accounts_by_matching_email(monkeypatch):
+    from urllib.parse import urlparse,parse_qs
+    monkeypatch.setenv('GOOGLE_CLIENT_ID','test-client.apps.googleusercontent.com');monkeypatch.setenv('GOOGLE_CLIENT_SECRET','test-secret');monkeypatch.setenv('GOOGLE_REDIRECT_URI','http://127.0.0.1:8000/api/v1/auth/google/callback')
+    class FakeResponse:
+        def raise_for_status(self):pass
+        def json(self):return {"id_token":"mock-signed-token"}
+    monkeypatch.setattr(main.httpx,'post',lambda *a,**kw:FakeResponse())
+    with TestClient(app) as client:
+        owner=register(client)
+        with TestClient(app) as other:
+            register(other);email=other.get('/api/v1/auth/me').json()['email']
+        headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        params=parse_qs(urlparse(client.post('/api/v1/auth/google/link/start',headers=headers,json={"password":"safe-password-987"}).json()['authorization_url']).query)
+        monkeypatch.setattr(main,'verify_google_id_token',lambda raw,audience:{"sub":"separate-google-sub","email":email,"email_verified":True,"nonce":params['nonce'][0]})
+        response=client.get('/api/v1/auth/google/callback',params={"state":params['state'][0],"code":"oauth-code"},follow_redirects=False)
+        assert response.headers['location'].endswith('?google=linked')
+        assert client.get('/api/v1/auth/me').json()['email']!=email
+        assert client.get('/api/v1/auth/google/status').json()['email']==email
+        with main.SessionLocal() as session:
+            linked=session.scalar(main.select(main.GoogleAccount).where(main.GoogleAccount.provider_subject=='separate-google-sub'))
+            assert linked and linked.user_id==owner['id']
+
 def test_user_cannot_read_another_users_meal():
     with TestClient(app) as owner, TestClient(app) as other:
         register(owner)

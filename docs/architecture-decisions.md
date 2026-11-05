@@ -6,6 +6,12 @@
 - Every access JWT refers to a revocable database session. Logout revokes that session; a password reset revokes every session for the account.
 - CSRF is enforced for refresh/logout when the ambient refresh cookie is present. Requests also need a configured origin and matching double-submit token.
 
+## Google account linking
+
+- Linking starts only after password reauthentication. The server stores a one-use, ten-minute state digest, nonce, and JWT-secret-derived encrypted PKCE verifier; Google secrets remain server-side.
+- The callback validates Google’s ID token signature, issuer, audience, and expiry through `google-auth`, then checks the one-time nonce and verified email claim. The stable Google subject is unique and is attached only to the account that initiated the flow. Email equality never merges LossFit users.
+- Unlink also requires the LossFit password. Every account has a password login method, so unlinking Google cannot remove the last usable login method. Live linking stays unavailable until credentials and an exactly matching redirect URI are configured.
+
 ## Assistant retries
 
 - Each assistant turn uses a client-generated idempotency key scoped to its conversation. The backend serializes writes per conversation and stores prompt, final answer, and citations under a unique key. A retry returns that saved result without calling the provider or appending another message pair; reusing a key with different prompt text is rejected.
