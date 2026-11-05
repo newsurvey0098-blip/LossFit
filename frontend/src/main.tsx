@@ -18,6 +18,7 @@ import LearningPage from './LearningPage';
 import ConnectedAccountsPage from './ConnectedAccountsPage';
 import PrivateRoute from './PrivateRoute';
 import LandingPage from './LandingPage';
+import RecipePage from './RecipePage';
 
 function usePageFocus(){const {pathname}=useLocation();React.useEffect(()=>{document.getElementById('main-content')?.focus({preventScroll:true});window.scrollTo(0,0)},[pathname]);}
 function PublicFrame(){usePageFocus();return <main className="public-frame" id="main-content" tabIndex={-1}><Outlet/></main>;}
@@ -80,7 +81,7 @@ function App(){return <><a className="skip-link" href="#main-content">Skip to ma
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>
   </Route><Route element={<PrivateRoute/>}><Route element={<PrivateShell/>}>
     <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
-    <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
+    <Route path="/recipes/new" element={<RecipePage/>}/><Route path="/recipes/:foodId/edit" element={<RecipePage/>}/><Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
     <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
     <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
     <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>

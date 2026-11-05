@@ -68,6 +68,25 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Save food'}).click();
   await expect(page.getByRole('status')).toContainText('Food saved to your private catalogue.');
 
+  await page.goto('/recipes/new');
+  await page.getByLabel('Recipe name').fill('Browser batch porridge');
+  await page.getByLabel('Finished yield (grams)').fill('300');
+  await page.getByLabel('Find an ingredient').fill('Browser test oatmeal');
+  await page.getByRole('button',{name:'Browser test oatmeal · cooked',exact:true}).click();
+  await page.getByRole('button',{name:'Save recipe',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Browser batch porridge'})).toBeVisible();
+  await expect(page.getByText('Finished yield: 300 g')).toBeVisible();
+  await page.getByRole('link',{name:'Edit recipe',exact:true}).click();
+  await page.getByLabel('Finished yield (grams)').fill('600');
+  await page.getByRole('button',{name:'Save recipe',exact:true}).click();
+  await expect(page.getByText('Finished yield: 600 g')).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Finished yield: 600 g')).toBeVisible();
+  await page.getByRole('link',{name:'Edit recipe',exact:true}).click();
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Delete recipe',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Find your next meal'})).toBeVisible();
+
   await page.goto('/meals/new');
   await page.getByLabel('Meal name').fill('Persisted oatmeal breakfast');
   await page.getByLabel('Search foods to add').fill('Browser test oatmeal');

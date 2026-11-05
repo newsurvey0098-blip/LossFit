@@ -86,6 +86,7 @@ class Food(Base):
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     nutrition_basis: Mapped[str] = mapped_column(String(40), default="per_100g")
     nutrition_provenance: Mapped[dict] = mapped_column(JSON, default=dict)
+    recipe: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     data_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -252,6 +253,12 @@ class MealItemIn(BaseModel):
     food_id:int|None=None; snapshot_id:str|None=Field(default=None,max_length=64); name:str|None=Field(default=None,max_length=160);food:str|None=Field(default=None,max_length=160)
     state:str|None=Field(default=None,max_length=40);grams:float=Field(gt=0,le=10000,allow_inf_nan=False);portion_label:str|None=Field(default=None,max_length=100);per100:NutritionPer100=Field(default_factory=NutritionPer100)
 class MealIn(BaseModel): name: str=Field(min_length=1,max_length=160,pattern=r".*\S.*"); meal_type: str=Field(pattern="^(breakfast|lunch|dinner|snack)$"); items: list[MealItemIn]=Field(max_length=50); eaten_at: datetime | None = None
+class RecipeIngredientIn(BaseModel):
+    food_id:int;grams:float=Field(gt=0,le=10000,allow_inf_nan=False);snapshot_id:str|None=Field(default=None,max_length=64)
+class RecipeIn(BaseModel):
+    name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*")
+    yield_grams:float=Field(gt=0,le=100000,allow_inf_nan=False)
+    ingredients:list[RecipeIngredientIn]=Field(min_length=1,max_length=50)
 class FoodIn(BaseModel):
     name: str=Field(min_length=1,max_length=160,pattern=r".*\S.*"); state: str=Field(default="prepared",pattern="^(raw|cooked|prepared|boiled|steamed|fried|grilled|roasted|baked|dried|frozen)$")
     kcal: float | None=Field(default=None,ge=0,le=10000,allow_inf_nan=False); protein: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); carbs: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); fat: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
@@ -573,7 +580,7 @@ def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=De
 
 def food_payload(f:Food,s:Session,is_favorite:bool=False):
     servings=list(s.scalars(select(FoodServing).where(FoodServing.food_id==f.id).order_by(FoodServing.grams)))
-    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"is_favorite":is_favorite,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"recipe":f.recipe,"is_custom":f.owner_id is not None,"is_favorite":is_favorite,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
 
 def accessible_food(food_id:int,s:Session,u:User)->Food:
     food=s.scalar(select(Food).where(Food.id==food_id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)))
@@ -647,6 +654,7 @@ def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
 def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not f:raise HTTPException(404,"Personal food not found")
+    if f.recipe:raise HTTPException(409,"Use the recipe editor to update ingredient-calculated nutrition")
     f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None;f.data_notes=None;f.nutrition_provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
     if data.serving_label and data.serving_grams and not s.scalar(select(FoodServing.id).where(FoodServing.food_id==f.id,FoodServing.label==data.serving_label.strip())):
         s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
@@ -679,7 +687,7 @@ def normalize_meal_items(raw_items:list[MealItemIn],owner:User,s:Session,previou
             food=s.scalar(select(Food).where(Food.id==entry.food_id,((Food.owner_id==None)|(Food.owner_id==owner.id))))
             if not food:raise HTTPException(422,"A selected catalogue food is unavailable")
             name=food.name;state=food.state;per100={k:getattr(food,k) for k in ("kcal","protein","carbs","fat")}
-            provenance={"verification":food.verification,"source":food.source,"source_record_id":food.source_record_id,"source_url":food.source_url,"nutrition_basis":food.nutrition_basis,"nutrition_provenance":food.nutrition_provenance or {},"data_notes":food.data_notes}
+            provenance={"verification":food.verification,"source":food.source,"source_record_id":food.source_record_id,"source_url":food.source_url,"nutrition_basis":food.nutrition_basis,"nutrition_provenance":food.nutrition_provenance or {},"data_notes":food.data_notes,"recipe":food.recipe}
         else:
             name=(entry.name or entry.food or "").strip()
             if not name:raise HTTPException(422,"Each meal item needs a name or catalogue food")
@@ -694,6 +702,32 @@ def calculate_meal_totals(items:list[dict])->dict[str,float|None]:
         values=[item.get("per100",{}).get(key) for item in items]
         totals[key]=None if any(value is None for value in values) else sum(float(value)*float(item["grams"])/100 for value,item in zip(values,items))
     return totals
+
+def write_recipe(data:RecipeIn,s:Session,u:User,food:Food|None=None):
+    if food and any(i.food_id==food.id for i in data.ingredients):raise HTTPException(422,"A recipe cannot contain itself")
+    previous=food.recipe.get('ingredients',[]) if food and food.recipe else []
+    items=normalize_meal_items([MealItemIn(**i.model_dump()) for i in data.ingredients],u,s,previous=previous)
+    if len(json.dumps(items))>100000:raise HTTPException(422,"Recipe ingredient snapshots are too large")
+    totals=calculate_meal_totals(items)
+    if any(value is not None and value*100/data.yield_grams>(10000 if key=='kcal' else 1000) for key,value in totals.items()):raise HTTPException(422,'Finished yield is too small for the ingredient nutrition totals')
+    if food is None:
+        food=Food(owner_id=u.id,name=data.name.strip(),state='prepared',category='Recipe',aliases=[]);s.add(food);s.flush()
+        s.add(FoodServing(food_id=food.id,label='100 g',grams=100,source='standard'))
+    food.name=data.name.strip();food.verification='estimated';food.source='User recipe ingredient snapshots';food.nutrition_basis='per_100g'
+    food.data_notes='Calculated from ingredient snapshots and finished yield; cooking nutrient-retention changes are not modeled.'
+    food.recipe={'yield_grams':data.yield_grams,'ingredients':items,'totals':totals}
+    food.nutrition_provenance={k:{'status':'estimated','source':food.source,'derivation':'Ingredient totals divided by user-provided finished yield'} for k,v in totals.items() if v is not None}
+    for key,value in totals.items():setattr(food,key,None if value is None else value*100/data.yield_grams)
+    s.commit();s.refresh(food);return food_payload(food,s)
+
+@app.post('/api/v1/recipes',status_code=201)
+def create_recipe(data:RecipeIn,s:Session=Depends(db),u:User=Depends(current_user)):return write_recipe(data,s,u)
+
+@app.put('/api/v1/recipes/{food_id}')
+def edit_recipe(food_id:int,data:RecipeIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    food=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id).with_for_update())
+    if not food or not food.recipe:raise HTTPException(404,'Recipe not found')
+    return write_recipe(data,s,u,food)
 
 def meal_payload(m:Meal,include_legacy_snapshot_ids:bool=True):
     items=[]

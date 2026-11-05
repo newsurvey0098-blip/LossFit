@@ -1,5 +1,9 @@
 # Architecture decisions
 
+## User recipes
+
+Recipes are private catalogue foods with a JSON ingredient snapshot and finished yield. Creation and editing share the authoritative meal-item resolver and nutrient calculator. Each nutrient remains unknown if any contributing ingredient lacks it; known totals are divided by the finished yield for per-100g values. Recipe nutrition is estimated and explicitly does not model cooking retention losses. Editing portions or yield preserves ingredient snapshots; removing and re-adding an ingredient resolves the latest accessible catalogue version. Meal snapshots embed recipe provenance so editing/deleting a recipe cannot rewrite logged nutrition. Self-inclusion, oversized snapshots, invalid quantities, and implausibly small yields are rejected. Existing manual-food editing cannot override recipe-calculated values.
+
 ## Authentication sessions
 
 - Access JWTs last 20 minutes and stay in browser memory. Refresh credentials are random opaque tokens, stored only as SHA-256 digests in PostgreSQL and delivered through a path-scoped HttpOnly cookie.
