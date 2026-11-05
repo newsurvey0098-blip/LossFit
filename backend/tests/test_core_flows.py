@@ -120,6 +120,28 @@ def test_restore_ledger_replay_dry_run_then_removes_deleted_account(tmp_path,mon
             assert db.scalar(main.select(main.AccountDeletionLedger.id).where(main.AccountDeletionLedger.email_digest==digest)) is not None
         assert not private.exists()
 
+def test_login_and_password_reset_rate_limits_are_persistent():
+    with TestClient(app) as client:
+        login_statuses=[client.post('/api/v1/auth/login',json={"email":"unknown@example.com","password":"wrong-password"}).status_code for _ in range(16)]
+        reset_statuses=[client.post('/api/v1/auth/forgot-password',json={"email":"unknown@example.com"}).status_code for _ in range(11)]
+        assert login_statuses==[401]*15+[429]
+        assert reset_statuses==[200]*10+[429]
+        with main.SessionLocal() as db:
+            rows=list(db.scalars(main.select(main.RateLimitBucket).where(main.RateLimitBucket.scope.in_(['login_ip','reset_request_ip']))))
+            assert {row.scope:row.count for row in rows}=={'login_ip':16,'reset_request_ip':11}
+            db.execute(main.delete(main.RateLimitBucket).where(main.RateLimitBucket.scope.in_(['login_ip','reset_request_ip'])));db.commit()
+
+def test_assistant_rate_limit_applies_during_provider_outage_without_saving(monkeypatch):
+    monkeypatch.delenv('AI_BASE_URL',raising=False);monkeypatch.delenv('AI_API_KEY',raising=False);monkeypatch.delenv('AI_MODEL',raising=False)
+    with TestClient(app) as client:
+        register(client);conversation=client.post('/api/v1/assistant/conversations',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}).json()
+        statuses=[client.post('/api/v1/assistant',json={"conversation_id":conversation['id'],"message":f"question {i}","idempotency_key":uuid4().hex}).status_code for i in range(16)]
+        assert statuses==[503]*15+[429]
+        assert client.get(f"/api/v1/assistant/conversations/{conversation['id']}").json()['messages']==[]
+        with main.SessionLocal() as db:
+            row=db.scalar(main.select(main.RateLimitBucket).where(main.RateLimitBucket.scope=='assistant_user'))
+            assert row is not None and row.count==16
+
 def test_profile_goal_updates_are_persisted_per_user():
     with TestClient(app) as client:
         register(client)
