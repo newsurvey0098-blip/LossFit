@@ -182,3 +182,38 @@ def test_account_deletion_requires_password_and_confirmation_then_cleans_user_da
             assert db.scalar(main.select(main.Food).where(main.Food.name=='Private oats')) is None
             assert db.scalar(main.select(main.Conversation).where(main.Conversation.id==conversation['id'])) is None
             assert db.scalar(main.select(main.AccountDeletionLedger)) is not None
+
+def test_catalogue_food_drives_server_nutrition_and_meal_snapshot_survives_catalogue_edits():
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        food=client.post('/api/v1/foods',headers=headers,json={"name":"Rice","state":"cooked","aliases":["steamed rice"],"kcal":130,"protein":2.7,"carbs":28,"fat":0.3,"serving_label":"1 cup","serving_grams":158})
+        assert food.status_code==201 and food.json()['servings'][-1]['grams']==158
+        assert client.get('/api/v1/foods?q=steamed%20rice').json()[0]['id']==food.json()['id']
+        meal=client.post('/api/v1/meals',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"food_id":food.json()['id'],"name":"tampered name","grams":150,"per100":{"kcal":999,"protein":999,"carbs":999,"fat":999}}]})
+        assert meal.status_code==201 and meal.json()['kcal']==195
+        item=meal.json()['items'][0]
+        assert item['name']=='Rice' and item['per100']['kcal']==130 and item['verification']=='user_provided'
+        changed=client.put(f"/api/v1/foods/{food.json()['id']}",headers=headers,json={"name":"Rice cooked","state":"cooked","kcal":200,"protein":3,"carbs":40,"fat":1})
+        assert changed.status_code==200
+        historical=client.get(f"/api/v1/meals/{meal.json()['id']}").json()
+        assert historical['items'][0]['name']=='Rice' and historical['items'][0]['per100']['kcal']==130 and historical['kcal']==195
+        edited=client.put(f"/api/v1/meals/{meal.json()['id']}",headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"snapshot_id":item['snapshot_id'],"food_id":food.json()['id'],"name":"tampered again","grams":200,"per100":{"kcal":1,"protein":1,"carbs":1,"fat":1}}]})
+        assert edited.status_code==200 and edited.json()['kcal']==260
+        assert edited.json()['items'][0]['per100']['kcal']==130
+        assert client.delete(f"/api/v1/foods/{food.json()['id']}",headers=headers).status_code==204
+        retained=client.get(f"/api/v1/meals/{meal.json()['id']}").json()
+        assert retained['items'][0]['name']=='Rice' and retained['kcal']==260
+
+def test_food_servings_and_food_edits_are_owner_scoped_and_nutrients_validated():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner);csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        food=owner.post('/api/v1/foods',headers=headers,json={"name":"Pear","kcal":57})
+        serving=food.json()['servings'][0]
+        assert owner.delete(f"/api/v1/foods/{food.json()['id']}/servings/{serving['id']}",headers=headers).status_code==400
+        register(other)
+        assert other.get(f"/api/v1/foods/{food.json()['id']}").status_code==404
+        other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        assert other.put(f"/api/v1/foods/{food.json()['id']}",headers=other_headers,json={"name":"Hijack","kcal":0}).status_code==404
+        assert other.delete(f"/api/v1/foods/{food.json()['id']}/servings/{serving['id']}",headers=other_headers).status_code==404
+        assert owner.post('/api/v1/foods',headers=headers,json={"name":"Bad nutrition","kcal":-1}).status_code==422
+        assert owner.post(f"/api/v1/foods/{food.json()['id']}/servings",headers=headers,json={"label":"Huge","grams":10001}).status_code==422

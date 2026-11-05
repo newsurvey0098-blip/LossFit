@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import os, secrets, csv, io, json
 import hashlib, hmac, smtplib
+from uuid import uuid4
 from email.message import EmailMessage
 from typing import Generator
 
@@ -11,7 +12,7 @@ import httpx
 from argon2 import PasswordHasher
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import create_engine, String, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 
@@ -38,12 +39,26 @@ class Food(Base):
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(160), index=True)
     state: Mapped[str] = mapped_column(String(40), default="prepared")
+    brand: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    aliases: Mapped[list] = mapped_column(JSON, default=list)
     verification: Mapped[str] = mapped_column(String(20), default="estimated")
     source: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    source_record_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    nutrition_basis: Mapped[str] = mapped_column(String(40), default="per_100g")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
     protein: Mapped[float | None] = mapped_column(Float, nullable=True)
     carbs: Mapped[float | None] = mapped_column(Float, nullable=True)
     fat: Mapped[float | None] = mapped_column(Float, nullable=True)
+class FoodServing(Base):
+    __tablename__ = "food_servings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    grams: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(20), default="user_provided")
 class Meal(Base):
     __tablename__ = "meals"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -98,8 +113,22 @@ class ChatMessage(Base):
 
 class RegisterIn(BaseModel): name: str = Field(min_length=1,max_length=100); email: EmailStr; password: str = Field(min_length=10,max_length=128)
 class LoginIn(BaseModel): email: EmailStr; password: str
-class MealIn(BaseModel): name: str; meal_type: str; items: list[dict]; eaten_at: datetime | None = None
-class FoodIn(BaseModel): name: str; state: str="prepared"; kcal: float | None=None; protein: float | None=None; carbs: float | None=None; fat: float | None=None
+class NutritionPer100(BaseModel):
+    kcal:float|None=Field(default=None,ge=0,le=10000,allow_inf_nan=False);protein:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False);carbs:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False);fat:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
+class MealItemIn(BaseModel):
+    food_id:int|None=None; snapshot_id:str|None=Field(default=None,max_length=64); name:str|None=Field(default=None,max_length=160);food:str|None=Field(default=None,max_length=160)
+    state:str|None=Field(default=None,max_length=40);grams:float=Field(gt=0,le=10000,allow_inf_nan=False);portion_label:str|None=Field(default=None,max_length=100);per100:NutritionPer100=Field(default_factory=NutritionPer100)
+class MealIn(BaseModel): name: str=Field(min_length=1,max_length=160,pattern=r".*\S.*"); meal_type: str=Field(pattern="^(breakfast|lunch|dinner|snack)$"); items: list[MealItemIn]=Field(max_length=50); eaten_at: datetime | None = None
+class FoodIn(BaseModel):
+    name: str=Field(min_length=1,max_length=160,pattern=r".*\S.*"); state: str=Field(default="prepared",pattern="^(raw|cooked|prepared|boiled|steamed|fried|grilled|roasted|baked|dried|frozen)$")
+    kcal: float | None=Field(default=None,ge=0,le=10000,allow_inf_nan=False); protein: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); carbs: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); fat: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
+    brand: str|None=Field(default=None,max_length=120);category: str|None=Field(default=None,max_length=80); aliases:list[str]=Field(default_factory=list,max_length=24)
+    serving_label:str|None=Field(default=None,max_length=100);serving_grams:float|None=Field(default=None,gt=0,le=10000,allow_inf_nan=False)
+    @model_validator(mode="after")
+    def validate_serving_pair(self):
+        if bool(self.serving_label)!=bool(self.serving_grams):raise ValueError("Serving label and grams must be provided together")
+        return self
+class FoodServingIn(BaseModel): label:str=Field(min_length=1,max_length=100);grams:float=Field(gt=0,le=10000,allow_inf_nan=False)
 class DeleteAccountIn(BaseModel): password:str=Field(min_length=1,max_length=128); confirmation:str
 class ProfileIn(BaseModel): name:str|None=Field(default=None,min_length=1,max_length=100); goals:dict[str,float]|None=None
 class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000)
@@ -111,6 +140,14 @@ class OnboardingIn(BaseModel):
 class WeightIn(BaseModel): weight_kg:float=Field(gt=20,le=350); recorded_at:datetime|None=None
 class ForgotPasswordIn(BaseModel): email:EmailStr
 class ResetPasswordIn(BaseModel): token:str=Field(min_length=32,max_length=256); password:str=Field(min_length=10,max_length=128)
+
+def clean_aliases(name:str,values:list[str])->list[str]:
+    seen={name.strip().casefold()};out=[]
+    for value in values:
+        alias=" ".join(value.split())
+        if alias and len(alias)<=160 and alias.casefold() not in seen:
+            seen.add(alias.casefold());out.append(alias)
+    return out[:24]
 
 app=FastAPI(title="LossFit API",version="0.1.0")
 if os.getenv("ENVIRONMENT")=="production" and (len(JWT_SECRET)<32 or JWT_SECRET=="local-only-change-this-secret-before-deploying"):
@@ -229,18 +266,89 @@ def update_profile(data:ProfileIn,s:Session=Depends(db),u:User=Depends(current_u
     s.commit();return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
 @app.get("/api/v1/foods")
 def foods(q:str="",s:Session=Depends(db),u:User=Depends(current_user)):
-    return [{"id":f.id,"name":f.name,"state":f.state,"verification":f.verification,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat} for f in s.scalars(select(Food).where((Food.owner_id==None)|(Food.owner_id==u.id),Food.name.ilike(f"%{q}%")).limit(60))]
+    candidates=list(s.scalars(select(Food).where((Food.owner_id==None)|(Food.owner_id==u.id)).order_by(Food.name).limit(500)))
+    needle=q.strip().casefold()
+    if needle:candidates=[f for f in candidates if needle in f.name.casefold() or any(needle in a.casefold() for a in (f.aliases or []))]
+    return [food_payload(f,s) for f in candidates[:60]]
+
+def food_payload(f:Food,s:Session):
+    servings=list(s.scalars(select(FoodServing).where(FoodServing.food_id==f.id).order_by(FoodServing.grams)))
+    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+
 @app.get("/api/v1/foods/{food_id}")
 def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,((Food.owner_id==None)|(Food.owner_id==u.id))))
     if not f: raise HTTPException(404,"Food not found")
-    return {"id":f.id,"name":f.name,"state":f.state,"verification":f.verification,"source":f.source,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat}
+    return food_payload(f,s)
 @app.post("/api/v1/foods",status_code=201)
 def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
-    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,verification="user_provided",kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat);s.add(f);s.commit();s.refresh(f);return {"id":f.id,"name":f.name,"verification":f.verification}
+    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
+    s.add(f);s.flush();s.add(FoodServing(food_id=f.id,label="100 g",grams=100,source="standard"))
+    if data.serving_label and data.serving_grams:s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
+    s.commit();s.refresh(f);return food_payload(f,s)
+@app.put("/api/v1/foods/{food_id}")
+def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
+    if not f:raise HTTPException(404,"Personal food not found")
+    f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None
+    if data.serving_label and data.serving_grams and not s.scalar(select(FoodServing.id).where(FoodServing.food_id==f.id,FoodServing.label==data.serving_label.strip())):
+        s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
+    s.commit();s.refresh(f);return food_payload(f,s)
+@app.post("/api/v1/foods/{food_id}/servings",status_code=201)
+def add_food_serving(food_id:int,data:FoodServingIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
+    if not f:raise HTTPException(404,"Personal food not found")
+    v=FoodServing(food_id=f.id,label=data.label.strip(),grams=data.grams,source="user_provided");s.add(v);s.commit();s.refresh(v);return {"id":v.id,"label":v.label,"grams":v.grams,"source":v.source}
+@app.delete("/api/v1/foods/{food_id}/servings/{serving_id}",status_code=204)
+def delete_food_serving(food_id:int,serving_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+    f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id));v=s.scalar(select(FoodServing).where(FoodServing.id==serving_id,FoodServing.food_id==food_id))
+    if not f or not v:raise HTTPException(404,"Serving not found")
+    if v.source=="standard":raise HTTPException(400,"The standard 100 g serving cannot be removed")
+    s.delete(v);s.commit()
+
+def normalize_meal_items(raw_items:list[MealItemIn],owner:User,s:Session,previous:list[dict]|None=None,meal_id:int|None=None)->list[dict]:
+    previous=previous or [];by_id={str(item.get("snapshot_id")):item for item in previous if item.get("snapshot_id")};result=[]
+    for index,entry in enumerate(raw_items):
+        saved=by_id.get(entry.snapshot_id or "")
+        if not saved and entry.snapshot_id and meal_id:
+            legacy_prefix=f"legacy:{meal_id}:"
+            if entry.snapshot_id.startswith(legacy_prefix):
+                try:legacy_index=int(entry.snapshot_id[len(legacy_prefix):]);saved=previous[legacy_index] if 0<=legacy_index<len(previous) else None
+                except ValueError:saved=None
+        if saved:
+            item=dict(saved);item["grams"]=entry.grams;item["portion_label"]=entry.portion_label or item.get("portion_label");result.append(item);continue
+        food=None
+        if entry.food_id is not None:
+            food=s.scalar(select(Food).where(Food.id==entry.food_id,((Food.owner_id==None)|(Food.owner_id==owner.id))))
+            if not food:raise HTTPException(422,"A selected catalogue food is unavailable")
+            name=food.name;state=food.state;per100={k:getattr(food,k) for k in ("kcal","protein","carbs","fat")}
+            provenance={"verification":food.verification,"source":food.source,"source_record_id":food.source_record_id,"source_url":food.source_url,"nutrition_basis":food.nutrition_basis}
+        else:
+            name=(entry.name or entry.food or "").strip()
+            if not name:raise HTTPException(422,"Each meal item needs a name or catalogue food")
+            state=entry.state or "unspecified";per100=entry.per100.model_dump()
+            provenance={"verification":"user_provided","source":"User provided meal entry","source_record_id":None,"source_url":None,"nutrition_basis":"per_100g"}
+        result.append({"snapshot_id":str(uuid4()),"food_id":food.id if food else None,"name":name,"state":state,"brand":food.brand if food else None,"grams":entry.grams,"portion_label":entry.portion_label,"per100":per100,**provenance})
+    return result
+
+def calculate_meal_totals(items:list[dict])->dict[str,float|None]:
+    totals={}
+    for key in ("kcal","protein","carbs","fat"):
+        values=[item.get("per100",{}).get(key) for item in items]
+        totals[key]=None if any(value is None for value in values) else sum(float(value)*float(item["grams"])/100 for value,item in zip(values,items))
+    return totals
+
+def meal_payload(m:Meal,include_legacy_snapshot_ids:bool=True):
+    items=[]
+    for index,raw in enumerate(m.items):
+        item=dict(raw)
+        if include_legacy_snapshot_ids and not item.get("snapshot_id"):item["snapshot_id"]=f"legacy:{m.id}:{index}"
+        items.append(item)
+    return {"id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at,"items":items,"kcal":m.kcal,"protein":m.protein,"carbs":m.carbs,"fat":m.fat}
+
 @app.get("/api/v1/meals")
 def meals(s:Session=Depends(db),u:User=Depends(current_user)):
-    return [{"id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at,"items":m.items,"kcal":m.kcal,"protein":m.protein,"carbs":m.carbs,"fat":m.fat} for m in s.scalars(select(Meal).where(Meal.owner_id==u.id).order_by(Meal.eaten_at.desc()).limit(100))]
+    return [meal_payload(m) for m in s.scalars(select(Meal).where(Meal.owner_id==u.id).order_by(Meal.eaten_at.desc()).limit(100))]
 @app.get("/api/v1/analytics/daily")
 def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
     try: local_tz=ZoneInfo(u.preferences.get("timezone","UTC"))
@@ -249,24 +357,24 @@ def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
     day_meals=list(s.scalars(select(Meal).where(Meal.owner_id==u.id,Meal.eaten_at>=start,Meal.eaten_at<end).order_by(Meal.eaten_at)))
     water_total=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
     totals={key:(None if any(getattr(m,key) is None for m in day_meals) else sum(getattr(m,key) for m in day_meals)) for key in ("kcal","protein","carbs","fat")}
-    return {"date":local_start.date().isoformat(),"goals":u.goals,"totals":totals,"water_ml":water_total,"meals":[{"id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at,"items":m.items,"kcal":m.kcal,"protein":m.protein,"carbs":m.carbs,"fat":m.fat} for m in day_meals]}
+    return {"date":local_start.date().isoformat(),"goals":u.goals,"totals":totals,"water_ml":water_total,"meals":[meal_payload(m) for m in day_meals]}
 @app.post("/api/v1/meals",status_code=201)
 def add_meal(data:MealIn,s:Session=Depends(db),u:User=Depends(current_user)):
-    totals={k:(None if any(item.get("per100",{}).get(k) is None for item in data.items) else sum(float(item.get("per100",{}).get(k))*float(item.get("grams",100))/100 for item in data.items)) for k in ("kcal","protein","carbs","fat")}
-    m=Meal(owner_id=u.id,name=data.name,meal_type=data.meal_type,eaten_at=data.eaten_at or datetime.now(timezone.utc),items=data.items,**totals);s.add(m);s.commit();s.refresh(m);return {"id":m.id,"name":m.name,**totals}
+    items=normalize_meal_items(data.items,u,s);totals=calculate_meal_totals(items)
+    m=Meal(owner_id=u.id,name=data.name.strip(),meal_type=data.meal_type,eaten_at=data.eaten_at or datetime.now(timezone.utc),items=items,**totals);s.add(m);s.commit();s.refresh(m);return meal_payload(m)
 @app.get("/api/v1/meals/{meal_id}")
 def meal_detail(meal_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     m=s.scalar(select(Meal).where(Meal.id==meal_id,Meal.owner_id==u.id))
     if not m: raise HTTPException(404,"Meal not found")
-    return {"id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at,"items":m.items,"kcal":m.kcal,"protein":m.protein,"carbs":m.carbs,"fat":m.fat}
+    return meal_payload(m)
 @app.put("/api/v1/meals/{meal_id}")
 def update_meal(meal_id:int,data:MealIn,s:Session=Depends(db),u:User=Depends(current_user)):
     m=s.scalar(select(Meal).where(Meal.id==meal_id,Meal.owner_id==u.id))
     if not m: raise HTTPException(404,"Meal not found")
-    totals={k:(None if any(item.get("per100",{}).get(k) is None for item in data.items) else sum(float(item.get("per100",{}).get(k))*float(item.get("grams",100))/100 for item in data.items)) for k in ("kcal","protein","carbs","fat")}
-    m.name=data.name;m.meal_type=data.meal_type;m.eaten_at=data.eaten_at or m.eaten_at;m.items=data.items
+    items=normalize_meal_items(data.items,u,s,previous=m.items,meal_id=m.id);totals=calculate_meal_totals(items)
+    m.name=data.name.strip();m.meal_type=data.meal_type;m.eaten_at=data.eaten_at or m.eaten_at;m.items=items
     for k,v in totals.items():setattr(m,k,v)
-    s.commit();return {"id":m.id,"name":m.name,**totals}
+    s.commit();return meal_payload(m)
 @app.delete("/api/v1/meals/{meal_id}",status_code=204)
 def delete_meal(meal_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     m=s.scalar(select(Meal).where(Meal.id==meal_id,Meal.owner_id==u.id))
