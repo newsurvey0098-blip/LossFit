@@ -37,4 +37,13 @@ The replay copies all signed deletion markers into the restored database, remove
 
 ## Current verification limit
 
-Ledger signing/tamper rejection and cleanup retry behavior are automated tests. The full database dump/restore plus deletion replay has not yet been exercised as an end-to-end restore drill. A restore drill remains a release requirement.
+The full dump/restore and deletion replay was exercised on 2026-11-06 with `scripts/restore-drill.py`. It created a synthetic account, food, and meal in the local `lossfit` development database, took a custom-format `pg_dump`, deleted the source account, exported a signed ledger, restored the dump into a new isolated database, ran Alembic migrations, verified exactly one ledger match, applied replay, and confirmed the user/meal/private food were removed while all 5,856 public catalogue foods remained. The restored database and artifacts were retained under the ignored `.local/` directory for inspection.
+
+Repeat locally with PostgreSQL 18 running, a stable `DELETION_LEDGER_SECRET`, and `DATABASE_URL` pointed only at the local LossFit development database:
+
+```powershell
+$env:DATABASE_URL = 'postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit'
+.\.venv\Scripts\python.exe scripts\restore-drill.py --confirm-source-mutation
+```
+
+The script rejects remote or non-LossFit source databases. It adds and deletes one uniquely named synthetic source account and creates a new isolated restore database; it does not drop databases.
