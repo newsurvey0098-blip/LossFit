@@ -123,6 +123,35 @@ def test_assistant_water_action_requires_preview_and_confirmation_and_is_idempot
         assert again.json()['result']['water_entry_id']==confirmed.json()['result']['water_entry_id']
         assert client.get('/api/v1/analytics/daily').json()['water_ml']==350
 
+def test_assistant_meal_action_previews_catalogue_snapshot_then_commits_once():
+    with TestClient(app) as owner,TestClient(app) as other:
+        user=register(owner);headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        food=owner.post('/api/v1/foods',headers=headers,json={"name":"Assistant action test oats","state":"cooked","kcal":120,"protein":4,"carbs":22,"fat":2}).json()
+        conversation=owner.post('/api/v1/assistant/conversations',headers=headers).json()
+        body={"conversation_id":conversation['id'],"action":"log_meal","idempotency_key":uuid4().hex,"meal":{"name":"Assistant oatmeal","meal_type":"breakfast","items":[{"food_id":food['id'],"grams":150}]}}
+        preview=owner.post('/api/v1/assistant/actions/preview',headers=headers,json=body)
+        assert preview.status_code==201 and preview.json()['preview']['totals']['kcal']==180
+        assert owner.get('/api/v1/meals').json()==[]
+        item=preview.json()['preview']['items'][0]
+        assert item['state']=='cooked' and item['verification']=='user_provided'
+        confirmed=owner.post(f"/api/v1/assistant/actions/{preview.json()['id']}/confirm",headers=headers)
+        assert confirmed.status_code==200 and confirmed.json()['result']['kcal']==180
+        meal_id=confirmed.json()['result']['meal_id']
+        again=owner.post(f"/api/v1/assistant/actions/{preview.json()['id']}/confirm",headers=headers)
+        assert again.json()['result']['meal_id']==meal_id
+        assert len(owner.get('/api/v1/meals').json())==1
+        deleted_food=owner.post('/api/v1/foods',headers=headers,json={"name":"Food removed during assistant preview","kcal":90}).json()
+        second_body={**body,"idempotency_key":uuid4().hex,"meal":{"name":"Preview to invalidate","meal_type":"snack","items":[{"food_id":deleted_food['id'],"grams":100}]}}
+        second=owner.post('/api/v1/assistant/actions/preview',headers=headers,json=second_body).json()
+        assert owner.delete(f"/api/v1/foods/{deleted_food['id']}",headers=headers).status_code==204
+        assert owner.post(f"/api/v1/assistant/actions/{second['id']}/confirm",headers=headers).status_code==409
+        assert len(owner.get('/api/v1/meals').json())==1
+        other_user=register(other);other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        other_conversation=other.post('/api/v1/assistant/conversations',headers=other_headers).json()
+        forbidden={**body,"conversation_id":other_conversation['id'],"idempotency_key":uuid4().hex}
+        assert other.post('/api/v1/assistant/actions/preview',headers=other_headers,json=forbidden).status_code==422
+        assert other.post(f"/api/v1/assistant/actions/{preview.json()['id']}/confirm",headers=other_headers).status_code==404
+
 def test_assistant_action_preview_is_private_cancelable_and_rechecked_before_write():
     with TestClient(app) as owner,TestClient(app) as other:
         register(owner);owner_headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}

@@ -20,9 +20,9 @@
 
 ## Assistant action confirmation
 
-- Assistant actions are registered server operations. The first operation, `log_water`, stores an owner-scoped preview bound to an owned conversation and an idempotency key. The preview includes the user's local date and current hydration total.
+- Assistant actions are registered server operations. `log_water` stores an owner-scoped preview bound to an owned conversation and an idempotency key; the preview includes the user's local date and current hydration total. `log_meal` resolves catalogue nutrition and stores a preparation-specific item snapshot with server-calculated totals.
 - A preview does not write health data. Confirmation rechecks ownership, expiry, supported action, local date, and whether the hydration total changed. It then writes the water entry and confirmation audit in one transaction; repeated confirmation returns the saved result.
-- The UI asks the user to confirm the amount before it is recorded. Further action types and model-driven tool proposals require their own argument validation and confirmation tests before registration.
+- The UI asks the user to confirm each action before it is recorded. Confirmations recheck private-food ownership and store the meal, water entry, result, and audit status atomically. Further action types and model-driven tool proposals require their own argument validation and confirmation tests before registration.
 
 ## Private file deletion
 
