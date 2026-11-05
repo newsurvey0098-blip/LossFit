@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { Activity, ArrowRight, CircleUserRound, Flame, Home, Plus, Sparkles, Utensils, Droplets, ChevronRight } from 'lucide-react';
 import './style.css';
 import AuthPage from './AuthPage';
@@ -16,6 +16,7 @@ import { AnalyticsPage, FoodLogPage } from './AnalyticsPages';
 import { ScannerPage, ScannerReviewPage } from './ScanPages';
 import LearningPage from './LearningPage';
 import ConnectedAccountsPage from './ConnectedAccountsPage';
+import PrivateRoute from './PrivateRoute';
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -31,6 +32,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <Link className="assistant-fab" to="/assistant" aria-label="Ask the nutrition assistant"><Sparkles size={20}/></Link>
   </>;
 }
+
+function PrivateShell(){return <Shell><Outlet/></Shell>}
 
 function Dashboard() {
   const [summary,setSummary]=React.useState<any>(null);
@@ -70,13 +73,16 @@ function Dashboard() {
 
 function LandingPage(){return <section className="card simple"><div className="watericon"><Flame/></div><p className="eyebrow">LOSSFIT · EVERYDAY NUTRITION</p><h1>Know what you eat.</h1><p className="muted">Build a clearer picture of your meals, nutrition, and daily habits with a private food log and a helpful nutrition assistant.</p><div className="actions"><Link className="button primary" to="/register">Create your account <ArrowRight size={16}/></Link><Link className="button" to="/login">Sign in</Link></div></section>}
 function NotFound(){return <section className="card simple"><p className="eyebrow">404</p><h1>Page not found</h1><p className="muted">That LossFit page isn’t available.</p><Link className="button primary" to="/home">Back to today</Link></section>}
-function App(){return <Shell><Routes>
+function App(){return <Routes>
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>
-  <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
-  <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
-  <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
-  <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
-  <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/><Route path="*" element={<NotFound/>}/>
-</Routes></Shell>}
+  <Route element={<PrivateRoute/>}><Route element={<PrivateShell/>}>
+    <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
+    <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
+    <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
+    <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
+    <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
+  </Route></Route>
+  <Route path="*" element={<NotFound/>}/>
+</Routes>}
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><BrowserRouter><App/></BrowserRouter></React.StrictMode>);

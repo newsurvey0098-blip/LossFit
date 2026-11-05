@@ -36,6 +36,7 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 - Provide loading, empty, success, and error states for every asynchronous view. No inert placeholder links or unreported unavailable integrations.
 - Keep all forms usable with keyboard and touch; honor reduced-motion settings.
 - Food nutrition status is shown per nutrient; absent values remain unavailable, source attribution is linked, and preparation variants/portion weights remain distinct.
+- Private routes verify the active session before rendering the authenticated shell, redirect signed-out users to login, and preserve their original destination. A transient session-check failure exposes a retry action.
 
 ## Cross-screen feature references
 
