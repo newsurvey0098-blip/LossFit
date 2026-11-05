@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- The live PostgreSQL browser flow now also verifies meal-name/portion edits after reload, downloaded JSON totals and CSV contents, meal deletion reflected on the dashboard, account deletion, and rejection of a subsequent sign-in with the deleted credentials. Both browser tests passed on a newly migrated disposable database. Playwright refuses to reuse an existing Vite server so the disposable run cannot silently inherit another server’s API proxy.
+
 ## Verified setup
 - Empty workspace inspected; local Git initialized.
 - ZIP extracted with path traversal checks: 21 HTML exports, 21 screenshots, and Obsidian design guide.

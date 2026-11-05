@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test';
+import {readFile} from 'node:fs/promises';
 
 test('registration, onboarding, private food, and meal persist through the API',async({page})=>{
   const suffix=crypto.randomUUID();
@@ -39,4 +40,41 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
   await expect(page.getByText('225 kcal')).toBeVisible();
   expect(page.url()).toBe(detailUrl);
+
+  await page.getByLabel('Meal name').fill('Edited oatmeal breakfast');
+  await page.getByLabel('Portion in grams').fill('200');
+  await page.getByRole('button',{name:'Save changes'}).click();
+  await expect(page.getByRole('status')).toContainText('Meal changes saved.');
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Edited oatmeal breakfast'})).toBeVisible();
+  await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
+
+  await page.goto('/profile');
+  const jsonDownload=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download JSON'}).click();
+  const jsonFile=await jsonDownload;
+  const exported=JSON.parse(await readFile((await jsonFile.path())!,'utf8'));
+  expect(exported.meals).toHaveLength(1);
+  expect(exported.meals[0].name).toBe('Edited oatmeal breakfast');
+  expect(exported.meals[0].nutrition.kcal).toBe(300);
+  const csvDownload=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download CSV'}).click();
+  expect(await readFile((await (await csvDownload).path())!,'utf8')).toContain('Edited oatmeal breakfast');
+
+  await page.goto(detailUrl);
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Delete meal',exact:true}).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByText('No meals logged yet today.')).toBeVisible();
+  await page.goto('/profile');
+  await page.getByRole('button',{name:'Delete account…'}).click();
+  await page.getByLabel('Current password').fill('safe-password-987');
+  await page.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');
+  await page.getByRole('button',{name:'Permanently delete account'}).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('Email').fill(`browser-${suffix}@example.com`);
+  await page.getByLabel('Password').fill('safe-password-987');
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
 });
