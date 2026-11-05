@@ -9,11 +9,24 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Password').fill('safe-password-987');
   await page.getByRole('button',{name:'Create account'}).click();
   await expect(page.getByRole('heading',{name:'Let’s get to know you.'})).toBeVisible();
+  await page.getByLabel('Units').selectOption('imperial');
+  await page.getByLabel('Height (in)').fill('70');
+  await page.getByLabel('Current weight (lb)').fill('154.32');
   await page.getByRole('button',{name:'Continue'}).click();
   await expect(page.getByRole('heading',{name:'How you eat and move.'})).toBeVisible();
   await page.getByRole('button',{name:'Finish setup'}).click();
   await expect(page.getByRole('heading',{name:'Your profile is ready'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Good morning, Browser Test User.'})).toBeVisible({timeout:5000});
+
+  await page.goto('/weight');
+  await page.getByLabel('Weight (lb)').fill('220.462262');
+  const weightWrite=page.waitForResponse(response=>response.url().endsWith('/api/v1/weight')&&response.request().method()==='POST');
+  await page.getByRole('button',{name:'Log weight'}).click();
+  expect((await (await weightWrite).json()).weight_kg).toBeCloseTo(100,4);
+  await page.reload();
+  await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
+  await page.goto('/analytics');
+  await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
 
   await page.goto('/foods/new');
   await page.getByLabel('Food name').fill('Browser test oatmeal');
@@ -50,6 +63,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
 
   await page.goto('/profile');
+  await expect(page.getByText(/70\.0 in · 220\.5 lb/)).toBeVisible();
   const jsonDownload=page.waitForEvent('download');
   await page.getByRole('button',{name:'Download JSON'}).click();
   const jsonFile=await jsonDownload;

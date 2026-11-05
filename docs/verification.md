@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- Imperial units now control onboarding body inputs, profile measurements, weight entry/history, and analytics weight displays. The live PostgreSQL browser flow verified 70-inch onboarding, a 220.462262-lb entry stored as approximately 100 kg, and 220.5-lb displays after reload in weight history, analytics, and profile. Both browser tests and seven frontend component tests passed; the production build passed. Stored measurements remain canonical kg/cm.
+
 - Scanner review now queries the full catalogue and preserves selected matches across search changes. Scanner availability failures expose retry, analysis remains disabled until availability is confirmed, and invalid replacement files clear the prior photo. Seven frontend tests pass, including provider-check failure/retry and finding a food outside the initial results. These scanner component tests use deterministic API mocks; live vision remains unverified.
 
 - The live PostgreSQL browser flow now also verifies meal-name/portion edits after reload, downloaded JSON totals and CSV contents, meal deletion reflected on the dashboard, account deletion, and rejection of a subsequent sign-in with the deleted credentials. Both browser tests passed on a newly migrated disposable database. Playwright refuses to reuse an existing Vite server so the disposable run cannot silently inherit another server’s API proxy.
