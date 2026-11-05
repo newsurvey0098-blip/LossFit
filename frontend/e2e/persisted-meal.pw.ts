@@ -156,6 +156,13 @@ test('registration, onboarding, private food, and meal persist through the API',
   expect(privateFoodId).toBeTruthy();
   await scannerMatch.selectOption(privateFoodId!);
   await page.getByLabel('Portion in grams').first().fill('150');
+  for(const [width,height] of [[390,844],[768,1024],[1440,900]]){
+    await page.setViewportSize({width,height});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    const confirmButton=page.getByRole('button',{name:'Add reviewed meal'});
+    await confirmButton.scrollIntoViewIfNeeded();
+    expect(await confirmButton.evaluate(button=>{const box=button.getBoundingClientRect();const target=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return target===button||button.contains(target)})).toBe(true);
+  }
   await page.getByRole('button',{name:'Add reviewed meal'}).click();
   await expect(page.getByRole('heading',{level:1,name:'Browser test oatmeal'})).toBeVisible();
   await expect(page.getByText('225 kcal · 7.5g protein · user provided')).toBeVisible();
