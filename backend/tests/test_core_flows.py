@@ -59,6 +59,22 @@ def test_custom_food_is_private_and_keeps_missing_nutrients_null():
         register(other)
         assert other.get('/api/v1/foods?q=test%20soup').json()==[]
 
+def test_favorites_and_recent_foods_are_private_idempotent_and_cleanup_with_food():
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);owner_headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        custom=owner.post('/api/v1/foods',headers=owner_headers,json={"name":"Favorite private lentil bowl","kcal":130}).json()
+        assert owner.put(f"/api/v1/foods/{custom['id']}/favorite",headers=owner_headers).status_code==204
+        assert owner.put(f"/api/v1/foods/{custom['id']}/favorite",headers=owner_headers).status_code==204
+        assert owner.put(f"/api/v1/foods/{custom['id']}/recent",headers=owner_headers).status_code==204
+        assert [f['id'] for f in owner.get('/api/v1/foods/favorites').json()]==[custom['id']]
+        assert [f['id'] for f in owner.get('/api/v1/foods/recent').json()]==[custom['id']]
+        register(other);other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        assert other.put(f"/api/v1/foods/{custom['id']}/favorite",headers=other_headers).status_code==404
+        assert other.put(f"/api/v1/foods/{custom['id']}/recent",headers=other_headers).status_code==404
+        assert other.get('/api/v1/foods/favorites').json()==[] and other.get('/api/v1/foods/recent').json()==[]
+        assert owner.delete(f"/api/v1/foods/{custom['id']}",headers=owner_headers).status_code==204
+        assert owner.get('/api/v1/foods/favorites').json()==[] and owner.get('/api/v1/foods/recent').json()==[]
+
 def test_profile_goal_updates_are_persisted_per_user():
     with TestClient(app) as client:
         register(client)

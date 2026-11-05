@@ -76,6 +76,20 @@ class FoodServing(Base):
     label: Mapped[str] = mapped_column(String(100))
     grams: Mapped[float] = mapped_column(Float)
     source: Mapped[str] = mapped_column(String(20), default="user_provided")
+class FoodFavorite(Base):
+    __tablename__ = "food_favorites"
+    __table_args__ = (UniqueConstraint("owner_id", "food_id", name="uq_food_favorite_owner_food"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class FoodRecent(Base):
+    __tablename__ = "food_recents"
+    __table_args__ = (UniqueConstraint("owner_id", "food_id", name="uq_food_recent_owner_food"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id", ondelete="CASCADE"), index=True)
+    viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 class ScanSession(Base):
     __tablename__ = "scan_sessions"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -398,17 +412,52 @@ def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=De
         pattern=f"%{escaped}%"
         statement=statement.where(or_(Food.name.ilike(pattern,escape="\\"),cast(Food.aliases,Text).ilike(pattern,escape="\\")))
     candidates=list(s.scalars(statement.order_by(Food.name).limit(60)))
-    return [food_payload(f,s) for f in candidates]
+    favorite_ids=set(s.scalars(select(FoodFavorite.food_id).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id.in_([f.id for f in candidates])))) if candidates else set()
+    return [food_payload(f,s,f.id in favorite_ids) for f in candidates]
 
-def food_payload(f:Food,s:Session):
+def food_payload(f:Food,s:Session,is_favorite:bool=False):
     servings=list(s.scalars(select(FoodServing).where(FoodServing.food_id==f.id).order_by(FoodServing.grams)))
-    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"is_favorite":is_favorite,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+
+def accessible_food(food_id:int,s:Session,u:User)->Food:
+    food=s.scalar(select(Food).where(Food.id==food_id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)))
+    if not food:raise HTTPException(404,"Food not found")
+    return food
+
+@app.get("/api/v1/foods/favorites")
+def favorite_foods(s:Session=Depends(db),u:User=Depends(current_user)):
+    records=list(s.scalars(select(Food).join(FoodFavorite,FoodFavorite.food_id==Food.id).where(FoodFavorite.owner_id==u.id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(FoodFavorite.created_at.desc())))
+    return [food_payload(food,s,True) for food in records]
+
+@app.put("/api/v1/foods/{food_id}/favorite",status_code=204)
+def add_food_favorite(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+    accessible_food(food_id,s,u)
+    statement=postgres_insert(FoodFavorite).values(owner_id=u.id,food_id=food_id).on_conflict_do_nothing(constraint="uq_food_favorite_owner_food")
+    s.execute(statement);s.commit()
+
+@app.delete("/api/v1/foods/{food_id}/favorite",status_code=204)
+def remove_food_favorite(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+    accessible_food(food_id,s,u)
+    s.execute(delete(FoodFavorite).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id==food_id));s.commit()
+
+@app.get("/api/v1/foods/recent")
+def recent_foods(s:Session=Depends(db),u:User=Depends(current_user)):
+    records=list(s.execute(select(Food,FoodRecent.viewed_at).join(FoodRecent,FoodRecent.food_id==Food.id).where(FoodRecent.owner_id==u.id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(FoodRecent.viewed_at.desc()).limit(30)))
+    favorite_ids=set(s.scalars(select(FoodFavorite.food_id).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id.in_([food.id for food,_ in records])))) if records else set()
+    return [{**food_payload(food,s,food.id in favorite_ids),"viewed_at":viewed_at} for food,viewed_at in records]
+
+@app.put("/api/v1/foods/{food_id}/recent",status_code=204)
+def touch_recent_food(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+    accessible_food(food_id,s,u)
+    statement=postgres_insert(FoodRecent).values(owner_id=u.id,food_id=food_id,viewed_at=datetime.now(timezone.utc)).on_conflict_do_update(constraint="uq_food_recent_owner_food",set_={"viewed_at":datetime.now(timezone.utc)})
+    s.execute(statement);s.commit()
 
 @app.get("/api/v1/foods/{food_id}")
 def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,((Food.owner_id==None)|(Food.owner_id==u.id))))
     if not f: raise HTTPException(404,"Food not found")
-    return food_payload(f,s)
+    is_favorite=s.scalar(select(FoodFavorite.id).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id==food_id)) is not None
+    return food_payload(f,s,is_favorite)
 @app.post("/api/v1/foods",status_code=201)
 def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
