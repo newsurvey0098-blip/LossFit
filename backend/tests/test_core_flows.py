@@ -1,0 +1,184 @@
+from uuid import uuid4
+from fastapi.testclient import TestClient
+from backend.app.main import app
+import backend.app.main as main
+
+def register(client):
+    suffix=uuid4().hex
+    response=client.post('/api/v1/auth/register',json={"name":"Test User","email":f"{suffix}@gmail.com","password":"safe-password-987"})
+    assert response.status_code==201
+    return response.json()
+
+def test_registration_meal_snapshot_summary_and_export():
+    with TestClient(app) as client:
+        register(client)
+        csrf=client.cookies['lf_csrf']
+        headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        meal=client.post('/api/v1/meals',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"food":"Rice","grams":150,"per100":{"kcal":130,"protein":2.7}}]})
+        assert meal.status_code==201
+        assert meal.json()['kcal']==195
+        assert meal.json()['protein']==4.05
+        assert client.get('/api/v1/analytics/daily').json()['totals']['kcal']==195
+        assert len(client.get('/api/v1/privacy/export.json').json()['meals'])==1
+        assert 'Lunch' in client.get('/api/v1/privacy/export.csv').text
+
+def test_cookie_mutations_require_csrf_and_origin():
+    with TestClient(app) as client:
+        register(client)
+        assert client.post('/api/v1/water?ml=250').status_code==403
+        csrf=client.cookies['lf_csrf']
+        bad=client.post('/api/v1/water?ml=250',headers={"origin":"https://bad.example","x-csrf-token":csrf})
+        assert bad.status_code==403
+        good=client.post('/api/v1/water?ml=250',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
+        assert good.status_code==201
+
+def test_user_cannot_read_another_users_meal():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner)
+        csrf=owner.cookies['lf_csrf']
+        response=owner.post('/api/v1/meals',headers={"origin":"http://localhost:5173","x-csrf-token":csrf},json={"name":"Private lunch","meal_type":"lunch","items":[]})
+        meal_id=response.json()['id']
+        register(other)
+        assert other.get(f'/api/v1/meals/{meal_id}').status_code==404
+
+def test_custom_food_is_private_and_keeps_missing_nutrients_null():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner)
+        csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        created=owner.post('/api/v1/foods',headers=headers,json={"name":"Homemade test soup","state":"cooked","kcal":55,"protein":None})
+        assert created.status_code==201
+        foods=owner.get('/api/v1/foods?q=test%20soup').json()
+        assert foods[0]['verification']=='user_provided' and foods[0]['protein'] is None
+        register(other)
+        assert other.get('/api/v1/foods?q=test%20soup').json()==[]
+
+def test_profile_goal_updates_are_persisted_per_user():
+    with TestClient(app) as client:
+        register(client)
+        csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        response=client.put('/api/v1/users/me',headers=headers,json={"name":"Updated Name","goals":{"calories":2000,"protein":125}})
+        assert response.status_code==200
+        assert response.json()['name']=='Updated Name'
+        assert client.get('/api/v1/analytics/daily').json()['goals']['protein']==125
+
+def test_unknown_macros_remain_unknown_in_meal_and_summary():
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        meal=client.post('/api/v1/meals',headers=headers,json={"name":"Meal with partial data","meal_type":"snack","items":[{"name":"Food","grams":100,"per100":{"kcal":80,"protein":None,"carbs":None,"fat":None}}]})
+        assert meal.status_code==201 and meal.json()['kcal']==80
+        assert meal.json()['protein'] is None and meal.json()['carbs'] is None
+        assert client.get('/api/v1/analytics/daily').json()['totals']['protein'] is None
+        assert client.get('/api/v1/privacy/export.json').json()['meals'][0]['nutrition']['protein_g'] is None
+
+def test_meal_update_and_delete_are_owner_scoped():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner);csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        meal=owner.post('/api/v1/meals',headers=headers,json={"name":"Meal","meal_type":"lunch","items":[]}).json()
+        updated=owner.put(f"/api/v1/meals/{meal['id']}",headers=headers,json={"name":"Updated","meal_type":"dinner","items":[]})
+        assert updated.status_code==200 and owner.get(f"/api/v1/meals/{meal['id']}").json()['name']=='Updated'
+        register(other);their_csrf=other.cookies['lf_csrf'];their_headers={"origin":"http://localhost:5173","x-csrf-token":their_csrf}
+        assert other.delete(f"/api/v1/meals/{meal['id']}",headers=their_headers).status_code==404
+        assert owner.delete(f"/api/v1/meals/{meal['id']}",headers=headers).status_code==204
+
+def test_conversation_history_is_private_and_deletable():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner);csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf};created=owner.post('/api/v1/assistant/conversations',headers=headers)
+        conversation_id=created.json()['id']
+        assert owner.get(f'/api/v1/assistant/conversations/{conversation_id}').json()['messages']==[]
+        register(other)
+        assert other.get(f'/api/v1/assistant/conversations/{conversation_id}').status_code==404
+        assert owner.delete(f'/api/v1/assistant/conversations/{conversation_id}',headers=headers).status_code==204
+        assert owner.get(f'/api/v1/assistant/conversations/{conversation_id}').status_code==404
+
+def test_clear_all_conversations_only_clears_current_account():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner);register(other)
+        h1={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        h2={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        owner.post('/api/v1/assistant/conversations',headers=h1);other.post('/api/v1/assistant/conversations',headers=h2)
+        assert owner.delete('/api/v1/assistant/conversations',headers=h1).status_code==204
+        assert owner.get('/api/v1/assistant/conversations').json()==[]
+        assert len(other.get('/api/v1/assistant/conversations').json())==1
+
+def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
+    captured={}
+    class FakeResponse:
+        def raise_for_status(self): pass
+        def json(self): return {"choices":[{"message":{"content":"You logged 195 kcal today."}}]}
+    class FakeClient:
+        def __init__(self,timeout): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def post(self,url,headers,json): captured['payload']=json;return FakeResponse()
+    monkeypatch.setattr(main.httpx,'Client',FakeClient)
+    monkeypatch.setenv('AI_BASE_URL','https://provider.invalid/v1');monkeypatch.setenv('AI_API_KEY','test-only-key');monkeypatch.setenv('AI_MODEL','test-model')
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        c=client.post('/api/v1/assistant/conversations',headers=headers).json()
+        client.post('/api/v1/meals',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"name":"rice","grams":150,"per100":{"kcal":130,"protein":None,"carbs":None,"fat":None}}]})
+        answer=client.post('/api/v1/assistant',headers=headers,json={"conversation_id":c['id'],"message":"How much did I eat?"})
+        assert answer.status_code==200 and answer.json()['message']=="You logged 195 kcal today."
+        assert '195.0' in captured['payload']['messages'][0]['content']
+        assert len(client.get(f"/api/v1/assistant/conversations/{c['id']}").json()['messages'])==2
+
+def test_onboarding_calculates_targets_and_persists_weight_history():
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        response=client.post('/api/v1/users/onboarding',headers=headers,json={"age":30,"sex":"female","height_cm":165,"weight_kg":70,"goal":"weight_loss","activity":"moderate","diet":"vegetarian","allergies":["peanuts"],"timezone":"Asia/Kolkata","units":"metric"})
+        assert response.status_code==200
+        assert 1400<=response.json()['goals']['calories']<=4500
+        assert response.json()['profile']['weight_kg']==70
+        me=client.get('/api/v1/auth/me').json()
+        assert me['preferences']['allergies']==['peanuts']
+        assert len(client.get('/api/v1/weight').json())==1
+
+def test_weight_history_is_user_scoped_and_onboarding_validates_timezone():
+    with TestClient(app) as owner, TestClient(app) as other:
+        register(owner);csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        payload={"age":28,"sex":"other","height_cm":172,"weight_kg":68,"goal":"balanced","activity":"light","timezone":"Not/AZone"}
+        assert owner.post('/api/v1/users/onboarding',headers=headers,json=payload).status_code==422
+        payload['timezone']='UTC'
+        assert owner.post('/api/v1/users/onboarding',headers=headers,json=payload).status_code==200
+        register(other)
+        assert other.get('/api/v1/weight').json()==[]
+
+def test_password_reset_uses_expiring_single_use_token(monkeypatch):
+    sent={}
+    monkeypatch.setenv('SMTP_HOST','mail.example.test');monkeypatch.setenv('SMTP_FROM','support@lossfit.test')
+    monkeypatch.setattr(main,'send_password_reset_email',lambda email,url:sent.update(email=email,url=url))
+    with TestClient(app) as client:
+        user=register(client)
+        csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        response=client.post('/api/v1/auth/forgot-password',headers=headers,json={"email":user['email']})
+        assert response.status_code==200
+        # The sent link is only captured by the deterministic email test double; the API response stays generic.
+        assert 'token' not in response.text and sent['email']==user['email']
+        token=sent['url'].split('token=')[1]
+        reset=client.post('/api/v1/auth/reset-password',headers=headers,json={"token":token,"password":"different-secure-password"})
+        assert reset.status_code==200
+        assert client.post('/api/v1/auth/reset-password',headers=headers,json={"token":token,"password":"another-secure-password"}).status_code==400
+        assert client.post('/api/v1/auth/login',json={"email":sent['email'],"password":"different-secure-password"}).status_code==200
+
+def test_forgot_password_response_does_not_reveal_account_existence():
+    with TestClient(app) as client:
+        unknown=client.post('/api/v1/auth/forgot-password',json={"email":"nobody@example.com"})
+        assert unknown.status_code==200
+        assert 'If an account exists' in unknown.json()['message']
+
+def test_account_deletion_requires_password_and_confirmation_then_cleans_user_data():
+    with TestClient(app) as client:
+        user=register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        client.post('/api/v1/foods',headers=headers,json={"name":"Private oats","kcal":80})
+        meal=client.post('/api/v1/meals',headers=headers,json={"name":"Breakfast","meal_type":"breakfast","items":[]})
+        conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
+        wrong=client.request('DELETE','/api/v1/account',headers=headers,json={"password":"wrong-password","confirmation":"DELETE MY ACCOUNT"})
+        assert wrong.status_code==403
+        deleted=client.request('DELETE','/api/v1/account',headers=headers,json={"password":"safe-password-987","confirmation":"DELETE MY ACCOUNT"})
+        assert deleted.status_code==204
+        assert client.get('/api/v1/auth/me').status_code==401
+        assert client.get(f"/api/v1/meals/{meal.json()['id']}").status_code==401
+        with main.SessionLocal() as db:
+            assert db.scalar(main.select(main.User).where(main.User.id==user['id'])) is None
+            assert db.scalar(main.select(main.Food).where(main.Food.name=='Private oats')) is None
+            assert db.scalar(main.select(main.Conversation).where(main.Conversation.id==conversation['id'])) is None
+            assert db.scalar(main.select(main.AccountDeletionLedger)) is not None

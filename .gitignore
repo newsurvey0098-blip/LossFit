@@ -1,0 +1,12 @@
+.venv/
+.runtime/
+.local/
+references/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+.env
+*.log
+playwright-report/
+test-results/
