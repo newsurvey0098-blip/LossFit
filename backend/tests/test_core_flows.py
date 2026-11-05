@@ -11,7 +11,8 @@ def register(client):
     suffix=uuid4().hex
     response=client.post('/api/v1/auth/register',json={"name":"Test User","email":f"{suffix}@gmail.com","password":"safe-password-987"})
     assert response.status_code==201
-    return response.json()
+    user=response.json();client.headers.update({"Authorization":f"Bearer {user['access_token']}"})
+    return user
 
 def test_registration_meal_snapshot_summary_and_export():
     with TestClient(app) as client:
@@ -29,12 +30,12 @@ def test_registration_meal_snapshot_summary_and_export():
 def test_cookie_mutations_require_csrf_and_origin():
     with TestClient(app) as client:
         register(client)
-        assert client.post('/api/v1/water?ml=250').status_code==403
         csrf=client.cookies['lf_csrf']
-        bad=client.post('/api/v1/water?ml=250',headers={"origin":"https://bad.example","x-csrf-token":csrf})
+        assert client.post('/api/v1/auth/refresh').status_code==403
+        bad=client.post('/api/v1/auth/refresh',headers={"origin":"https://bad.example","x-csrf-token":csrf})
         assert bad.status_code==403
-        good=client.post('/api/v1/water?ml=250',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
-        assert good.status_code==201
+        good=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
+        assert good.status_code==200 and good.json()['access_token']
 
 def test_user_cannot_read_another_users_meal():
     with TestClient(app) as owner, TestClient(app) as other:
@@ -161,7 +162,30 @@ def test_password_reset_uses_expiring_single_use_token(monkeypatch):
         reset=client.post('/api/v1/auth/reset-password',headers=headers,json={"token":token,"password":"different-secure-password"})
         assert reset.status_code==200
         assert client.post('/api/v1/auth/reset-password',headers=headers,json={"token":token,"password":"another-secure-password"}).status_code==400
-        assert client.post('/api/v1/auth/login',json={"email":sent['email'],"password":"different-secure-password"}).status_code==200
+        assert client.get('/api/v1/auth/me').status_code==401
+        login=client.post('/api/v1/auth/login',json={"email":sent['email'],"password":"different-secure-password"})
+        assert login.status_code==200
+        client.headers.update({"Authorization":f"Bearer {login.json()['access_token']}"})
+        assert client.get('/api/v1/auth/me').status_code==200
+
+def test_refresh_rotates_tokens_and_logout_revokes_current_session():
+    with TestClient(app) as client:
+        register(client);old_access=client.headers['Authorization'];old_refresh=client.cookies.get('lf_refresh');csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        rotated=client.post('/api/v1/auth/refresh',headers=headers)
+        assert rotated.status_code==200 and rotated.json()['access_token']!=old_access.removeprefix('Bearer ')
+        new_refresh=client.cookies.get('lf_refresh');new_csrf=client.cookies['lf_csrf'];assert new_refresh!=old_refresh
+        client.headers.update({"Authorization":f"Bearer {rotated.json()['access_token']}"})
+        assert client.get('/api/v1/auth/me').status_code==200
+        client.cookies.set('lf_refresh',old_refresh,path='/api/v1/auth')
+        reused=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf})
+        assert reused.status_code==401
+        client.cookies.set('lf_refresh',new_refresh,path='/api/v1/auth')
+        logout=client.post('/api/v1/auth/logout',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf})
+        assert logout.status_code==204
+        assert client.get('/api/v1/auth/me').status_code==401
+        client.cookies.set('lf_refresh',new_refresh,path='/api/v1/auth')
+        client.cookies.set('lf_csrf',new_csrf,path='/')
+        assert client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf}).status_code==401
 
 def test_forgot_password_response_does_not_reveal_account_existence():
     with TestClient(app) as client:

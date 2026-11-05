@@ -15,6 +15,8 @@ The initial migration was applied to an empty local database. The current schema
 
 Password reset is enabled only when `SMTP_HOST` and `SMTP_FROM` are set. Configure an SSL SMTP relay (`SMTP_PORT`, default 465), credentials where required, and `APP_BASE_URL` for the reset link. Without SMTP, the endpoint returns the same privacy-preserving response but cannot deliver a reset email.
 
+Authentication returns a 20-minute access token held only in frontend memory. A rotating 30-day refresh token is stored as a hash in PostgreSQL and sent in an HttpOnly, SameSite=Lax cookie scoped to `/api/v1/auth`; production sets `Secure`. Refresh and logout require the readable double-submit CSRF token and an allowed `Origin`. To configure a separate test database, set `DATABASE_URL` for both Alembic and pytest before running them; do not point tests at a production database.
+
 Account deletion removes the account's application records in one database transaction and records a keyed email digest in a restricted ledger. Configure vision credentials in backend-only `AI_BASE_URL`, `AI_API_KEY`, and `VISION_MODEL` values to enable the photo scanner. A restore procedure must replay the deletion ledger against restored user tables before serving traffic. Database backups may retain old personal data until their configured retention expires; the ledger is intended to prevent those restores from reactivating deleted accounts.
 
 ## Production operations

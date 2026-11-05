@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, U
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import create_engine, String, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, UniqueConstraint
+from sqlalchemy import create_engine, String, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 
@@ -38,6 +38,14 @@ class User(Base):
     profile: Mapped[dict] = mapped_column(JSON, default=dict)
     preferences: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
+    refresh_token_hash: Mapped[str] = mapped_column(String(64),unique=True,index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True),nullable=True)
 class Food(Base):
     __tablename__ = "foods"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -200,7 +208,7 @@ app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http:/
 async def csrf_protection(request:Request,call_next):
     if request.method in {"POST","PUT","PATCH","DELETE"} and request.url.path not in {"/api/v1/auth/login","/api/v1/auth/register"}:
         cookie=request.cookies.get("lf_csrf")
-        if request.cookies.get("lf_access") and (not cookie or request.headers.get("x-csrf-token")!=cookie or request.headers.get("origin") not in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",")):
+        if request.cookies.get("lf_refresh") and (not cookie or request.headers.get("x-csrf-token")!=cookie or request.headers.get("origin") not in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",")):
             return Response(status_code=403,content="CSRF validation failed")
     return await call_next(request)
 def db() -> Generator[Session,None,None]:
@@ -208,13 +216,23 @@ def db() -> Generator[Session,None,None]:
     try: yield s
     finally: s.close()
 def current_user(request: Request, s: Session=Depends(db)) -> User:
-    token=request.cookies.get("lf_access") or request.headers.get("authorization","").removeprefix("Bearer ")
-    try: uid=jwt.decode(token,JWT_SECRET,algorithms=["HS256"])["sub"]
+    access=request.headers.get("authorization","").removeprefix("Bearer ")
+    try: claims=jwt.decode(access,JWT_SECRET,algorithms=["HS256"]);uid=claims["sub"];session_id=int(claims["sid"])
     except Exception: raise HTTPException(401,"Please sign in")
     user=s.get(User,int(uid))
     if not user: raise HTTPException(401,"Please sign in")
+    auth_session=s.get(AuthSession,session_id);now=datetime.now(timezone.utc)
+    if not auth_session or auth_session.user_id!=user.id or auth_session.revoked_at or auth_session.expires_at<=now:raise HTTPException(401,"Please sign in")
     return user
-def token(user): return jwt.encode({"sub":str(user.id),"exp":datetime.now(timezone.utc)+timedelta(minutes=20)},JWT_SECRET,algorithm="HS256")
+def token(user,session_id:int): return jwt.encode({"sub":str(user.id),"sid":session_id,"jti":secrets.token_urlsafe(12),"exp":datetime.now(timezone.utc)+timedelta(minutes=20)},JWT_SECRET,algorithm="HS256")
+def token_hash(raw:str)->str:return hashlib.sha256(raw.encode()).hexdigest()
+def set_auth_cookies(response:Response,refresh:str):
+    secure=os.getenv("ENVIRONMENT")=="production";ttl=30*24*60*60
+    response.set_cookie("lf_refresh",refresh,httponly=True,samesite="lax",secure=secure,max_age=ttl,path="/api/v1/auth")
+    response.set_cookie("lf_csrf",secrets.token_urlsafe(24),httponly=False,samesite="lax",secure=secure,max_age=ttl,path="/")
+def new_auth_session(user:User,s:Session,response:Response):
+    raw=secrets.token_urlsafe(48);session=AuthSession(user_id=user.id,refresh_token_hash=token_hash(raw),expires_at=datetime.now(timezone.utc)+timedelta(days=30));s.add(session);s.flush();set_auth_cookies(response,raw)
+    return {"access_token":token(user,session.id),"id":user.id,"name":user.name,"email":user.email,"goals":user.goals,"profile":user.profile}
 def send_password_reset_email(email:str,reset_url:str):
     host=os.getenv("SMTP_HOST");sender=os.getenv("SMTP_FROM")
     if not host or not sender:raise RuntimeError("Email delivery is not configured")
@@ -240,18 +258,27 @@ def ready(s:Session=Depends(db)):
 def register(data:RegisterIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"register_ip",request_ip(request),100,3600)
     if s.scalar(select(User).where(User.email==data.email.lower())): raise HTTPException(409,"Account already exists")
-    user=User(name=data.name.strip(),email=data.email.lower(),password_hash=hasher.hash(data.password)); s.add(user); s.commit(); s.refresh(user)
-    response.set_cookie("lf_access",token(user),httponly=True,samesite="lax",secure=os.getenv("ENVIRONMENT")=="production",max_age=1200,path="/api/v1")
-    response.set_cookie("lf_csrf",secrets.token_urlsafe(24),httponly=False,samesite="lax",secure=os.getenv("ENVIRONMENT")=="production",max_age=1200,path="/")
-    return {"id":user.id,"name":user.name,"email":user.email,"goals":user.goals,"profile":user.profile}
+    user=User(name=data.name.strip(),email=data.email.lower(),password_hash=hasher.hash(data.password));s.add(user);s.flush();result=new_auth_session(user,s,response);s.commit();return result
 @app.post("/api/v1/auth/login")
 def login(data:LoginIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"login_ip",request_ip(request),15,900)
     user=s.scalar(select(User).where(User.email==data.email.lower()))
     if not user or not hasher.verify(user.password_hash,data.password): raise HTTPException(401,"Email or password is incorrect")
-    response.set_cookie("lf_access",token(user),httponly=True,samesite="lax",secure=os.getenv("ENVIRONMENT")=="production",max_age=1200,path="/api/v1")
-    response.set_cookie("lf_csrf",secrets.token_urlsafe(24),httponly=False,samesite="lax",secure=os.getenv("ENVIRONMENT")=="production",max_age=1200,path="/")
-    return {"id":user.id,"name":user.name,"email":user.email,"goals":user.goals,"profile":user.profile}
+    result=new_auth_session(user,s,response);s.commit();return result
+@app.post("/api/v1/auth/refresh")
+def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)):
+    enforce_rate_limit(s,"refresh_ip",request_ip(request),120,900)
+    raw=request.cookies.get("lf_refresh")
+    if not raw:raise HTTPException(401,"Sign in again")
+    session=s.scalar(select(AuthSession).where(AuthSession.refresh_token_hash==token_hash(raw)).with_for_update())
+    now=datetime.now(timezone.utc)
+    if not session or session.revoked_at or session.expires_at<=now:
+        response.delete_cookie("lf_refresh",path="/api/v1/auth")
+        raise HTTPException(401,"Sign in again")
+    user=s.get(User,session.user_id)
+    if not user:raise HTTPException(401,"Sign in again")
+    new_raw=secrets.token_urlsafe(48);session.refresh_token_hash=token_hash(new_raw);session.expires_at=now+timedelta(days=30);s.commit();set_auth_cookies(response,new_raw)
+    return {"access_token":token(user,session.id)}
 @app.post("/api/v1/auth/forgot-password")
 def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db)):
     enforce_rate_limit(s,"reset_request_ip",request_ip(request),10,900)
@@ -268,7 +295,7 @@ def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db))
         s.delete(entry);s.commit()
     return generic
 @app.post("/api/v1/auth/reset-password")
-def reset_password(data:ResetPasswordIn,request:Request,s:Session=Depends(db)):
+def reset_password(data:ResetPasswordIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"reset_attempt_ip",request_ip(request),15,900)
     digest=hashlib.sha256(data.token.encode()).hexdigest();entry=s.scalar(select(PasswordReset).where(PasswordReset.token_hash==digest,PasswordReset.used_at.is_(None),PasswordReset.expires_at>datetime.now(timezone.utc)))
     if not entry:raise HTTPException(400,"This reset link is invalid or expired. Request a new one.")
@@ -276,9 +303,15 @@ def reset_password(data:ResetPasswordIn,request:Request,s:Session=Depends(db)):
     if not user:raise HTTPException(400,"This reset link is invalid or expired. Request a new one.")
     user.password_hash=hasher.hash(data.password);entry.used_at=datetime.now(timezone.utc)
     s.execute(PasswordReset.__table__.update().where(PasswordReset.user_id==user.id,PasswordReset.id!=entry.id,PasswordReset.used_at.is_(None)).values(used_at=datetime.now(timezone.utc)))
-    s.commit();return {"message":"Password updated. Sign in with your new password."}
+    s.execute(update(AuthSession).where(AuthSession.user_id==user.id,AuthSession.revoked_at.is_(None)).values(revoked_at=datetime.now(timezone.utc)))
+    s.commit();response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/");return {"message":"Password updated. Sign in with your new password."}
 @app.post("/api/v1/auth/logout",status_code=204)
-def logout(response:Response): response.delete_cookie("lf_access",path="/api/v1"); response.delete_cookie("lf_csrf",path="/")
+def logout(request:Request,response:Response,s:Session=Depends(db)):
+    raw=request.cookies.get("lf_refresh")
+    if raw:
+        session=s.scalar(select(AuthSession).where(AuthSession.refresh_token_hash==token_hash(raw)))
+        if session and session.revoked_at is None:session.revoked_at=datetime.now(timezone.utc);s.commit()
+    response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
 @app.get("/api/v1/auth/me")
 def me(u:User=Depends(current_user)): return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
 @app.post("/api/v1/users/onboarding")
@@ -608,13 +641,14 @@ def delete_account(data:DeleteAccountIn,response:Response,s:Session=Depends(db),
         s.execute(delete(Conversation).where(Conversation.owner_id==u.id))
         s.execute(delete(Meal).where(Meal.owner_id==u.id));s.execute(delete(Water).where(Water.owner_id==u.id))
         s.execute(delete(WeightRecord).where(WeightRecord.owner_id==u.id));s.execute(delete(PasswordReset).where(PasswordReset.user_id==u.id))
+        s.execute(delete(AuthSession).where(AuthSession.user_id==u.id))
         s.execute(delete(Food).where(Food.owner_id==u.id));s.delete(u);s.commit()
     except Exception:
         s.rollback();raise
     for path in scan_paths:
         try:path.unlink(missing_ok=True)
         except OSError:pass
-    response.delete_cookie("lf_access",path="/api/v1");response.delete_cookie("lf_csrf",path="/")
+    response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
 @app.get("/api/v1/assistant/conversations")
 def conversations(s:Session=Depends(db),u:User=Depends(current_user)):
     return [{"id":c.id,"title":c.title,"created_at":c.created_at,"updated_at":c.updated_at} for c in s.scalars(select(Conversation).where(Conversation.owner_id==u.id).order_by(Conversation.updated_at.desc()))]
