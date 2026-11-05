@@ -75,6 +75,17 @@ def test_favorites_and_recent_foods_are_private_idempotent_and_cleanup_with_food
         assert owner.delete(f"/api/v1/foods/{custom['id']}",headers=owner_headers).status_code==204
         assert owner.get('/api/v1/foods/favorites').json()==[] and owner.get('/api/v1/foods/recent').json()==[]
 
+def test_private_file_cleanup_failure_is_retained_for_retry(monkeypatch,tmp_path):
+    monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path))
+    directory=tmp_path/'temporarily-not-a-file';directory.mkdir()
+    with main.SessionLocal() as db:
+        db.add(main.PrivateFileCleanup(private_path=str(directory)));db.commit()
+        first=main.drain_private_file_cleanup(db)
+        assert first=={"removed":0,"failed":1,"remaining":1}
+        directory.rmdir()
+        second=main.drain_private_file_cleanup(db)
+        assert second=={"removed":1,"failed":0,"remaining":0}
+
 def test_profile_goal_updates_are_persisted_per_user():
     with TestClient(app) as client:
         register(client)

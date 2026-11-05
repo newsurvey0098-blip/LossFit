@@ -11,6 +11,11 @@
 - Each assistant turn uses a client-generated idempotency key scoped to its conversation. The backend serializes writes per conversation and stores prompt, final answer, and citations under a unique key. A retry returns that saved result without calling the provider or appending another message pair; reusing a key with different prompt text is rejected.
 - Provider failures do not persist partial turns. The browser retains the key while offering a retry for the same pending text.
 
+## Private file deletion
+
+- Scan-file paths are placed in an internal cleanup queue in the same transaction that removes the owning scan/account. Files are unlinked only after resolving under the configured private-upload root; failed or unsafe paths remain queued for operator review/retry.
+- `scripts/cleanup-private-files.py` drains the queue without printing file paths. The queue survives account deletion and has no user-facing API.
+
 ## Nutrition and history
 
 - The API resolves catalogue food nutrition and portions before writing a meal. Scanner and assistant suggestions cannot set authoritative nutrients.

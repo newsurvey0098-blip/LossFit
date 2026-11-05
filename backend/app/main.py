@@ -90,6 +90,13 @@ class FoodRecent(Base):
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     food_id: Mapped[int] = mapped_column(ForeignKey("foods.id", ondelete="CASCADE"), index=True)
     viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+class PrivateFileCleanup(Base):
+    __tablename__ = "private_file_cleanup"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    private_path: Mapped[str] = mapped_column(String(500))
+    attempts: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 class ScanSession(Base):
     __tablename__ = "scan_sessions"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -424,6 +431,25 @@ def accessible_food(food_id:int,s:Session,u:User)->Food:
     if not food:raise HTTPException(404,"Food not found")
     return food
 
+def queue_private_file_cleanup(s:Session,private_path:str):
+    s.add(PrivateFileCleanup(private_path=private_path))
+
+def drain_private_file_cleanup(s:Session,limit:int=100)->dict:
+    root=Path(os.getenv("PRIVATE_UPLOAD_DIR",".local/uploads")).resolve()
+    pending=list(s.scalars(select(PrivateFileCleanup).order_by(PrivateFileCleanup.id).limit(limit)))
+    removed=failed=0;completed=[];now=datetime.now(timezone.utc)
+    for item in pending:
+        path=Path(item.private_path).resolve()
+        if root not in path.parents:
+            item.attempts+=1;item.last_attempt_at=now;failed+=1;continue
+        try:
+            path.unlink(missing_ok=True);completed.append(item.id);removed+=1
+        except OSError:
+            item.attempts+=1;item.last_attempt_at=now;failed+=1
+    if completed:s.execute(delete(PrivateFileCleanup).where(PrivateFileCleanup.id.in_(completed)))
+    s.commit()
+    return {"removed":removed,"failed":failed,"remaining":s.scalar(select(func.count()).select_from(PrivateFileCleanup)) or 0}
+
 @app.get("/api/v1/foods/favorites")
 def favorite_foods(s:Session=Depends(db),u:User=Depends(current_user)):
     records=list(s.scalars(select(Food).join(FoodFavorite,FoodFavorite.food_id==Food.id).where(FoodFavorite.owner_id==u.id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(FoodFavorite.created_at.desc())))
@@ -704,9 +730,7 @@ def confirm_scan(scan_id:int,data:ScanConfirmIn,request:Request,s:Session=Depend
 def delete_scan(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id))
     if not scan:raise HTTPException(404,"Scan not found")
-    path=Path(scan.private_path);s.delete(scan);s.commit()
-    try:path.unlink(missing_ok=True)
-    except OSError:pass
+    queue_private_file_cleanup(s,scan.private_path);s.delete(scan);s.commit();drain_private_file_cleanup(s)
 @app.get("/api/v1/privacy/export.json")
 def export_json(start_date:date|None=None,end_date:date|None=None,s:Session=Depends(db),u:User=Depends(current_user)):
     query=select(Meal).where(Meal.owner_id==u.id);start,end=local_date_bounds(start_date,end_date,u)
@@ -734,7 +758,8 @@ def delete_account(data:DeleteAccountIn,response:Response,s:Session=Depends(db),
     digest=hmac.new(os.getenv("DELETION_LEDGER_SECRET",JWT_SECRET).encode(),u.email.lower().encode(),hashlib.sha256).hexdigest()
     try:
         s.add(AccountDeletionLedger(email_digest=digest))
-        scan_paths=[Path(value) for value in s.scalars(select(ScanSession.private_path).where(ScanSession.owner_id==u.id))]
+        for value in s.scalars(select(ScanSession.private_path).where(ScanSession.owner_id==u.id)):
+            queue_private_file_cleanup(s,value)
         s.execute(delete(ScanSession).where(ScanSession.owner_id==u.id))
         s.execute(delete(ChatMessage).where(ChatMessage.conversation_id.in_(select(Conversation.id).where(Conversation.owner_id==u.id))))
         s.execute(delete(Conversation).where(Conversation.owner_id==u.id))
@@ -744,9 +769,7 @@ def delete_account(data:DeleteAccountIn,response:Response,s:Session=Depends(db),
         s.execute(delete(Food).where(Food.owner_id==u.id));s.delete(u);s.commit()
     except Exception:
         s.rollback();raise
-    for path in scan_paths:
-        try:path.unlink(missing_ok=True)
-        except OSError:pass
+    drain_private_file_cleanup(s)
     response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
 @app.get("/api/v1/assistant/conversations")
 def conversations(s:Session=Depends(db),u:User=Depends(current_user)):
