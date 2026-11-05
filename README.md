@@ -29,6 +29,8 @@ Account deletion removes the account's application records in one database trans
 
 Set `ENVIRONMENT=production`, a random secret, HTTPS origins, restricted CORS, provider credentials only in the backend secret store, and private upload storage outside the web root. Enable database backups with `pg_dump -Fc`; restore to an isolated database with `pg_restore --clean --if-exists`. Establish encrypted offsite retention and deletion-ledger replay before production. Configure error monitoring with request-body and credential scrubbing.
 
+See [backup and restore procedures](docs/backup-restore.md) for Windows PowerShell commands, protected deletion-ledger export, dry-run review, replay, and private-file cleanup.
+
 ## Implementation status
 
 See [screen inventory](docs/screen-inventory.md) and [verification record](docs/verification.md). Current screens and endpoints are foundations; the complete workflows and production security described in the requirements remain outstanding.

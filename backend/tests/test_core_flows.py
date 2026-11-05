@@ -2,12 +2,14 @@ from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import io
+import json, os, subprocess, sys
 from PIL import Image
 from fastapi.testclient import TestClient
 from backend.app.main import app, Food, FoodServing
 import backend.app.main as main
 from backend.app.knowledge import cosine
 from backend.app.food_import import normalize_foundation_food
+from backend.app.deletion_ledger import export_ledger, verify_ledger
 
 def register(client):
     suffix=uuid4().hex
@@ -85,6 +87,38 @@ def test_private_file_cleanup_failure_is_retained_for_retry(monkeypatch,tmp_path
         directory.rmdir()
         second=main.drain_private_file_cleanup(db)
         assert second=={"removed":1,"failed":0,"remaining":0}
+
+def test_deletion_ledger_export_is_signed_and_tampering_is_rejected():
+    secret='stable-test-ledger-secret'
+    original=[main.hmac.new(secret.encode(),b"deleted@example.com",main.hashlib.sha256).hexdigest()]
+    document=export_ledger(original,secret)
+    assert verify_ledger(document,secret)==original
+    tampered={**document,"digests":["0"*64]}
+    try:
+        verify_ledger(tampered,secret)
+        assert False,"tampered ledger must not validate"
+    except ValueError as error:
+        assert 'signature' in str(error)
+
+def test_restore_ledger_replay_dry_run_then_removes_deleted_account(tmp_path,monkeypatch):
+    secret='stable-replay-test-secret';monkeypatch.setenv('DELETION_LEDGER_SECRET',secret);monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path))
+    private=tmp_path/'restored-user'/'scan.jpg';private.parent.mkdir();private.write_bytes(b'private')
+    with TestClient(app) as client:
+        user=register(client);food=client.post('/api/v1/foods',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']},json={"name":"Restore test private oats","kcal":90}).json()
+        with main.SessionLocal() as db:
+            db.add(main.ScanSession(owner_id=user['id'],private_path=str(private),candidates=[],status='needs_review'));db.commit()
+        digest=main.hmac.new(secret.encode(),user['email'].lower().encode(),main.hashlib.sha256).hexdigest()
+        ledger=tmp_path/'ledger.json';ledger.write_text(json.dumps(export_ledger([digest],secret)),encoding='utf-8')
+        env=os.environ.copy();env['DELETION_LEDGER_SECRET']=secret;env['PRIVATE_UPLOAD_DIR']=str(tmp_path)
+        command=[sys.executable,'scripts/replay-deletion-ledger.py','--ledger-file',str(ledger)]
+        dry=subprocess.run(command,capture_output=True,text=True,env=env,check=True)
+        assert '1 restored accounts match' in dry.stdout and private.exists()
+        applied=subprocess.run(command+['--apply'],capture_output=True,text=True,env=env,check=True)
+        assert 'Replay applied. 1 accounts removed' in applied.stdout and str(private) not in applied.stdout
+        with main.SessionLocal() as db:
+            assert db.get(main.User,user['id']) is None and db.get(main.Food,food['id']) is None
+            assert db.scalar(main.select(main.AccountDeletionLedger.id).where(main.AccountDeletionLedger.email_digest==digest)) is not None
+        assert not private.exists()
 
 def test_profile_goal_updates_are_persisted_per_user():
     with TestClient(app) as client:

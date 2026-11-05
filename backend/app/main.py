@@ -17,12 +17,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, U
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, model_validator
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 
+load_dotenv()
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit")
 JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deploying")
 engine = create_engine(DB_URL, pool_pre_ping=True)
@@ -439,7 +441,10 @@ def drain_private_file_cleanup(s:Session,limit:int=100)->dict:
     pending=list(s.scalars(select(PrivateFileCleanup).order_by(PrivateFileCleanup.id).limit(limit)))
     removed=failed=0;completed=[];now=datetime.now(timezone.utc)
     for item in pending:
-        path=Path(item.private_path).resolve()
+        try:
+            path=Path(item.private_path).resolve()
+        except (OSError,RuntimeError,ValueError):
+            item.attempts+=1;item.last_attempt_at=now;failed+=1;continue
         if root not in path.parents:
             item.attempts+=1;item.last_attempt_at=now;failed+=1;continue
         try:
