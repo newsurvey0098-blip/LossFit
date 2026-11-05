@@ -9,7 +9,8 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Email').fill(`browser-${suffix}@example.com`);
   await page.getByLabel('Password').fill('safe-password-987');
   await page.getByRole('button',{name:'Create account'}).click();
-  await expect(page.getByRole('heading',{name:'Let’s get to know you.'})).toBeVisible();
+  await expect(page).toHaveURL(/\/onboarding\/body$/, {timeout:15000});
+  await expect(page.getByRole('heading',{name:'Let’s get to know you.'})).toBeVisible({timeout:15000});
   await page.getByLabel('Units').selectOption('imperial');
   await page.getByLabel('Height (in)').fill('70');
   await page.getByLabel('Current weight (lb)').fill('154.32');
