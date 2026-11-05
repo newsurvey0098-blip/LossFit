@@ -13,6 +13,7 @@ import OnboardingPage from './OnboardingPage';
 import WeightPage from './WeightPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './PasswordPages';
 import { AnalyticsPage, FoodLogPage } from './AnalyticsPages';
+import { ScannerPage, ScannerReviewPage } from './ScanPages';
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -71,6 +72,7 @@ function App(){return <Shell><Routes>
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>
   <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
   <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/>
+  <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
   <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
   <Route path="/profile" element={<ProfilePage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/><Route path="*" element={<NotFound/>}/>
 </Routes></Shell>}

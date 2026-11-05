@@ -5,7 +5,7 @@ LossFit is a nutrition tracking application being built from the supplied screen
 ## Local Windows setup
 
 1. Install Python 3.12 and PostgreSQL 18. Node 22.23.4 is project-local in `.runtime/` (the setup downloads it and verifies its published SHA256).
-2. Copy `.env.example` to `.env`, then set a unique `JWT_SECRET`.
+2. Copy `.env.example` to `.env`, then set unique `JWT_SECRET` and stable `DELETION_LEDGER_SECRET` values. Do not rotate the deletion-ledger key while retained backups may need replay.
 3. Create the Python environment and install `backend/requirements.txt`.
 4. Run `scripts/start-db.ps1` to initialize/start the isolated project cluster on port 55432.
 5. Run `alembic -c backend/alembic.ini upgrade head` from the repository root.
@@ -15,7 +15,7 @@ The initial migration was applied to an empty local database. The current schema
 
 Password reset is enabled only when `SMTP_HOST` and `SMTP_FROM` are set. Configure an SSL SMTP relay (`SMTP_PORT`, default 465), credentials where required, and `APP_BASE_URL` for the reset link. Without SMTP, the endpoint returns the same privacy-preserving response but cannot deliver a reset email.
 
-Account deletion removes the account's application records in one database transaction and records a keyed email digest in a restricted ledger. A restore procedure must replay this ledger against restored user tables before serving traffic. Database backups may retain old personal data until their configured retention expires; the ledger is intended to prevent those restores from reactivating deleted accounts.
+Account deletion removes the account's application records in one database transaction and records a keyed email digest in a restricted ledger. Configure vision credentials in backend-only `AI_BASE_URL`, `AI_API_KEY`, and `VISION_MODEL` values to enable the photo scanner. A restore procedure must replay the deletion ledger against restored user tables before serving traffic. Database backups may retain old personal data until their configured retention expires; the ledger is intended to prevent those restores from reactivating deleted accounts.
 
 ## Production operations
 

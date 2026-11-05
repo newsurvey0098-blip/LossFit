@@ -1,6 +1,8 @@
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import io
+from PIL import Image
 from fastapi.testclient import TestClient
 from backend.app.main import app
 import backend.app.main as main
@@ -167,9 +169,11 @@ def test_forgot_password_response_does_not_reveal_account_existence():
         assert unknown.status_code==200
         assert 'If an account exists' in unknown.json()['message']
 
-def test_account_deletion_requires_password_and_confirmation_then_cleans_user_data():
+def test_account_deletion_requires_password_and_confirmation_then_cleans_user_data(monkeypatch,tmp_path):
     with TestClient(app) as client:
         user=register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path));private_file=tmp_path/str(user['id'])/'scan.jpg';private_file.parent.mkdir();private_file.write_bytes(b'private')
+        with main.SessionLocal() as db:db.add(main.ScanSession(owner_id=user['id'],private_path=str(private_file),candidates=[],status='needs_review'));db.commit()
         client.post('/api/v1/foods',headers=headers,json={"name":"Private oats","kcal":80})
         meal=client.post('/api/v1/meals',headers=headers,json={"name":"Breakfast","meal_type":"breakfast","items":[]})
         conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
@@ -177,6 +181,7 @@ def test_account_deletion_requires_password_and_confirmation_then_cleans_user_da
         assert wrong.status_code==403
         deleted=client.request('DELETE','/api/v1/account',headers=headers,json={"password":"safe-password-987","confirmation":"DELETE MY ACCOUNT"})
         assert deleted.status_code==204
+        assert not private_file.exists()
         assert client.get('/api/v1/auth/me').status_code==401
         assert client.get(f"/api/v1/meals/{meal.json()['id']}").status_code==401
         with main.SessionLocal() as db:
@@ -240,3 +245,65 @@ def test_meal_history_analytics_and_exports_use_user_local_dates():
         assert len(export['meals'])==1 and export['meals'][0]['name']=='Before midnight UTC'
         assert client.get(f"/api/v1/privacy/export.csv?start_date={local_today}&end_date={local_today}").status_code==200
         assert client.get('/api/v1/analytics/range?days=6').status_code==422
+
+def test_scanner_validates_private_image_resolves_candidates_and_confirms_once(monkeypatch,tmp_path):
+    image=io.BytesIO();Image.new('RGB',(320,240),(30,140,70)).save(image,format='PNG');image_bytes=image.getvalue()
+    monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path));monkeypatch.setenv('AI_BASE_URL','https://vision.invalid/v1');monkeypatch.setenv('AI_API_KEY','secret-test-key');monkeypatch.setenv('VISION_MODEL','test-vision')
+    captured={}
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return {"choices":[{"message":{"content":'{"items":[{"name":"banana","grams":118}]}'}}]}
+    class FakeClient:
+        def __init__(self,timeout):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,url,headers,json):captured['request']=json;return Response()
+    monkeypatch.setattr(main.httpx,'Client',FakeClient)
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);csrf=owner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        food=owner.post('/api/v1/foods',headers=headers,json={"name":"Banana","kcal":89,"carbs":22.8,"protein":1.1,"fat":0.3}).json()
+        scan=owner.post('/api/v1/scans',headers=headers,files={"image":("photo.png",image_bytes,"image/png")})
+        assert scan.status_code==201 and scan.json()['candidates'][0]['name']=='banana'
+        assert set(scan.json()['candidates'][0]).issuperset({'id','name','grams','matches'})
+        assert 'per100' not in scan.json()['candidates'][0] and 'kcal' not in scan.json()['candidates'][0]
+        scan_id=scan.json()['id'];path=next(tmp_path.rglob('*.jpg'))
+        with Image.open(path) as sanitized:assert sanitized.format=='JPEG' and sanitized.getexif()=={}
+        assert owner.get(f'/api/v1/scans/{scan_id}/image').status_code==200
+        register(other)
+        assert other.get(f'/api/v1/scans/{scan_id}').status_code==404
+        other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        assert other.delete(f'/api/v1/scans/{scan_id}',headers=other_headers).status_code==404
+        incomplete=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[],"removed_candidate_ids":[]})
+        assert incomplete.status_code==422
+        confirmed=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"candidate_id":"0","food_id":food['id'],"grams":118}],"removed_candidate_ids":[]})
+        assert confirmed.status_code==200 and confirmed.json()['meal']['kcal']==105.02
+        repeat=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch duplicate","meal_type":"lunch","items":[{"candidate_id":"0","food_id":food['id'],"grams":118}],"removed_candidate_ids":[]})
+        assert repeat.status_code==200 and repeat.json()['already_confirmed'] is True
+        assert repeat.json()['meal']['id']==confirmed.json()['meal']['id']
+        assert owner.delete(f'/api/v1/scans/{scan_id}',headers=headers).status_code==204
+        assert not path.exists()
+
+def test_scanner_reports_provider_outage_and_rejects_small_or_invalid_images(monkeypatch,tmp_path):
+    image=io.BytesIO();Image.new('RGB',(64,64),'red').save(image,format='PNG');valid=image.getvalue()
+    tiny=io.BytesIO();Image.new('RGB',(10,10),'red').save(tiny,format='PNG')
+    monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path));monkeypatch.delenv('AI_BASE_URL',raising=False);monkeypatch.delenv('AI_API_KEY',raising=False);monkeypatch.delenv('AI_MODEL',raising=False);monkeypatch.delenv('VISION_MODEL',raising=False)
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        assert client.get('/api/v1/scan/status').json()['available'] is False
+        assert client.post('/api/v1/scans',headers=headers,files={"image":("tiny.png",tiny.getvalue(),"image/png")}).status_code==422
+        assert client.post('/api/v1/scans',headers=headers,files={"image":("bad.jpg",b"not an image","image/jpeg")}).status_code==415
+        outage=client.post('/api/v1/scans',headers=headers,files={"image":("food.png",valid,"image/png")})
+        assert outage.status_code==503 and 'manually' in outage.json()['detail']
+        assert list(tmp_path.rglob('*.jpg'))==[]
+
+def test_scanner_upload_rate_limit_persists_across_requests(monkeypatch):
+    image=io.BytesIO();Image.new('RGB',(64,64),'blue').save(image,format='PNG');valid=image.getvalue()
+    monkeypatch.delenv('AI_BASE_URL',raising=False);monkeypatch.delenv('AI_API_KEY',raising=False);monkeypatch.delenv('AI_MODEL',raising=False);monkeypatch.delenv('VISION_MODEL',raising=False)
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        statuses=[client.post('/api/v1/scans',headers=headers,files={"image":("food.png",valid,"image/png")}).status_code for _ in range(4)]
+        assert statuses==[503,503,503,429]
+        with main.SessionLocal() as db:
+            digest=main.hmac.new(main.JWT_SECRET.encode(),(f"scan_upload_user:{client.get('/api/v1/auth/me').json()['id']}").encode(),main.hashlib.sha256).hexdigest()
+            row=db.scalar(main.select(main.RateLimitBucket).where(main.RateLimitBucket.scope=='scan_upload_user',main.RateLimitBucket.subject_digest==digest))
+            assert row is not None and row.count==4
