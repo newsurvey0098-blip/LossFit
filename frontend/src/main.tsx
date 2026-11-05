@@ -17,9 +17,10 @@ import { ScannerPage, ScannerReviewPage } from './ScanPages';
 import LearningPage from './LearningPage';
 import ConnectedAccountsPage from './ConnectedAccountsPage';
 import PrivateRoute from './PrivateRoute';
+import LandingPage from './LandingPage';
 
 function usePageFocus(){const {pathname}=useLocation();React.useEffect(()=>{document.getElementById('main-content')?.focus({preventScroll:true});window.scrollTo(0,0)},[pathname]);}
-function PublicFrame(){usePageFocus();return <main id="main-content" tabIndex={-1}><Outlet/></main>;}
+function PublicFrame(){usePageFocus();return <main className="public-frame" id="main-content" tabIndex={-1}><Outlet/></main>;}
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();usePageFocus();
@@ -74,7 +75,6 @@ function Dashboard() {
   </>;
 }
 
-function LandingPage(){return <section className="card simple"><div className="watericon"><Flame/></div><p className="eyebrow">LOSSFIT · EVERYDAY NUTRITION</p><h1>Know what you eat.</h1><p className="muted">Build a clearer picture of your meals, nutrition, and daily habits with a private food log and a helpful nutrition assistant.</p><div className="actions"><Link className="button primary" to="/register">Create your account <ArrowRight size={16}/></Link><Link className="button" to="/login">Sign in</Link></div></section>}
 function NotFound(){return <section className="card simple"><p className="eyebrow">404</p><h1>Page not found</h1><p className="muted">That LossFit page isn’t available.</p><Link className="button primary" to="/home">Back to today</Link></section>}
 function App(){return <><a className="skip-link" href="#main-content">Skip to main content</a><Routes><Route element={<PublicFrame/>}>
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>

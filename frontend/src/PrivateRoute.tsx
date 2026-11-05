@@ -1,3 +1,4 @@
+import AppBootstrapScreen from './AppBootstrapScreen';
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { authenticatedFetch, setAccessToken } from './api';
@@ -16,7 +17,7 @@ export default function PrivateRoute() {
     }catch(reason){setError(reason instanceof Error?reason.message:'Session check failed');setState('error');}
   },[]);
   React.useEffect(()=>{void verify();},[verify]);
-  if(state==='checking')return <main id="main-content" tabIndex={-1}><p role="status" className="muted">Checking your session…</p></main>;
+  if(state==='checking')return <AppBootstrapScreen/>;
   if(state==='error')return <main id="main-content" tabIndex={-1}><section className="card simple"><h1>Can’t verify your session</h1><p role="alert" className="error">{error}</p><button className="button primary" onClick={()=>void verify()}>Try again</button></section></main>;
   if(state==='signed-out')return <Navigate to="/login" replace state={{from:location.pathname}}/>;
   return <Outlet/>;

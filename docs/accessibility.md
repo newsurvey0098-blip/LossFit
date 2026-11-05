@@ -11,3 +11,5 @@ The companion live API test uses a freshly migrated PostgreSQL database for regi
 ## Remaining verification
 
 Automated axe checks do not prove complete accessibility. Screen-reader behavior, actual browser zoom, all dialog/form error states, the configured scanner review, assistant provider responses, and every screen variant still need broader verification. Narrow viewport tests are not a substitute for a browser zoom check. No blanket WCAG conformance is claimed.
+
+The welcome page additionally passed axe and 320/390/768/1440px reflow checks. Reduced-motion startup animation is disabled, and the branded loader disappears when the real session check completes. Desktop and mobile welcome screenshots were visually inspected.
