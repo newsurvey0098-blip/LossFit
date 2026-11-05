@@ -230,6 +230,34 @@ def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
         assert conflict.status_code==409
         assert len(client.get(f"/api/v1/assistant/conversations/{c['id']}").json()['messages'])==2
 
+def test_assistant_daily_context_uses_profile_timezone(monkeypatch):
+    captured={}
+    class FakeResponse:
+        def raise_for_status(self):pass
+        def json(self):return {"choices":[{"message":{"content":"Your day is ready."}}]}
+    class FakeClient:
+        def __init__(self,timeout):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,url,headers,json):captured['system']=json['messages'][0]['content'];return FakeResponse()
+    monkeypatch.setattr(main.httpx,'Client',FakeClient)
+    monkeypatch.setenv('AI_BASE_URL','https://provider.invalid/v1');monkeypatch.setenv('AI_API_KEY','test-only-key');monkeypatch.setenv('AI_MODEL','test-model')
+    timezone_name='Asia/Kolkata';local_today=datetime.now(ZoneInfo(timezone_name)).date()
+    start,end=main.local_date_bounds(local_today,local_today,type('Owner',(),{'preferences':{'timezone':timezone_name}})())
+    with TestClient(app) as client:
+        register(client);headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        client.put('/api/v1/users/preferences',headers=headers,json={"diet":"no_restrictions","allergies":[],"timezone":timezone_name,"units":"metric"})
+        previous=(start-timedelta(microseconds=1)).isoformat()
+        current=(start+timedelta(minutes=1)).isoformat()
+        for name,eaten_at,kcal in [('Yesterday meal',previous,12),('Today meal',current,34)]:
+            response=client.post('/api/v1/meals',headers=headers,json={"name":name,"meal_type":"snack","eaten_at":eaten_at,"items":[{"name":"Test food","grams":100,"per100":{"kcal":kcal}}]})
+            assert response.status_code==201
+        conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
+        answer=client.post('/api/v1/assistant',json={"conversation_id":conversation['id'],"message":"What have I eaten today?","idempotency_key":uuid4().hex})
+        assert answer.status_code==200
+        assert 'Today meal' in captured['system'] and 'Yesterday meal' not in captured['system']
+        assert '34.0' in captured['system']
+
 def test_onboarding_calculates_targets_and_persists_weight_history():
     with TestClient(app) as client:
         register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}

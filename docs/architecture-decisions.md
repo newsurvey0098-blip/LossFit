@@ -10,6 +10,7 @@
 
 - Each assistant turn uses a client-generated idempotency key scoped to its conversation. The backend serializes writes per conversation and stores prompt, final answer, and citations under a unique key. A retry returns that saved result without calling the provider or appending another message pair; reusing a key with different prompt text is rejected.
 - Provider failures do not persist partial turns. The browser retains the key while offering a retry for the same pending text.
+- Daily assistant totals use the same profile-local calendar bounds as dashboard history. User-entered preference text is treated as untrusted data and cannot override assistant safety and evidence rules.
 
 ## Private file deletion
 
