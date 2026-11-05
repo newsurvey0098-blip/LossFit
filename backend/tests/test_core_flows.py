@@ -1,4 +1,6 @@
 from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 from backend.app.main import app
 import backend.app.main as main
@@ -217,3 +219,24 @@ def test_food_servings_and_food_edits_are_owner_scoped_and_nutrients_validated()
         assert other.delete(f"/api/v1/foods/{food.json()['id']}/servings/{serving['id']}",headers=other_headers).status_code==404
         assert owner.post('/api/v1/foods',headers=headers,json={"name":"Bad nutrition","kcal":-1}).status_code==422
         assert owner.post(f"/api/v1/foods/{food.json()['id']}/servings",headers=headers,json={"label":"Huge","grams":10001}).status_code==422
+
+def test_meal_history_analytics_and_exports_use_user_local_dates():
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        onboarding={"age":30,"sex":"other","height_cm":170,"weight_kg":70,"goal":"balanced","activity":"light","timezone":"Asia/Kolkata","units":"metric"}
+        assert client.post('/api/v1/users/onboarding',headers=headers,json=onboarding).status_code==200
+        local_today=datetime.now(ZoneInfo('Asia/Kolkata')).date()
+        local_start=datetime.combine(local_today,datetime.min.time(),ZoneInfo('Asia/Kolkata'))
+        start_utc=local_start.astimezone(timezone.utc)
+        first=client.post('/api/v1/meals',headers=headers,json={"name":"Before midnight UTC","meal_type":"dinner","eaten_at":(start_utc+timedelta(minutes=5)).isoformat(),"items":[{"name":"Partial meal","grams":100,"per100":{"kcal":100,"protein":None}}]})
+        next_day=client.post('/api/v1/meals',headers=headers,json={"name":"Next local date","meal_type":"snack","eaten_at":(start_utc+timedelta(days=1,minutes=5)).isoformat(),"items":[]})
+        assert first.status_code==201 and next_day.status_code==201
+        history=client.get(f"/api/v1/meals?date={local_today.isoformat()}").json()
+        assert [m['name'] for m in history]==['Before midnight UTC']
+        trends=client.get('/api/v1/analytics/range?days=7').json()
+        bucket=next(d for d in trends['daily'] if d['date']==local_today.isoformat())
+        assert bucket['totals']['kcal']==100 and bucket['totals']['protein'] is None
+        export=client.get(f"/api/v1/privacy/export.json?start_date={local_today}&end_date={local_today}").json()
+        assert len(export['meals'])==1 and export['meals'][0]['name']=='Before midnight UTC'
+        assert client.get(f"/api/v1/privacy/export.csv?start_date={local_today}&end_date={local_today}").status_code==200
+        assert client.get('/api/v1/analytics/range?days=6').status_code==422

@@ -1,5 +1,5 @@
 """LossFit API foundation with persisted accounts, foods and meal snapshots."""
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import os, secrets, csv, io, json
 import hashlib, hmac, smtplib
@@ -346,18 +346,47 @@ def meal_payload(m:Meal,include_legacy_snapshot_ids:bool=True):
         items.append(item)
     return {"id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at,"items":items,"kcal":m.kcal,"protein":m.protein,"carbs":m.carbs,"fat":m.fat}
 
+def user_timezone(u:User):
+    try:return ZoneInfo(u.preferences.get("timezone","UTC"))
+    except ZoneInfoNotFoundError:return timezone.utc
+
+def local_date_bounds(start_date:date|None,end_date:date|None,u:User):
+    if start_date and end_date and start_date>end_date:raise HTTPException(422,"Start date must be on or before end date")
+    if start_date and end_date and (end_date-start_date).days>3650:raise HTTPException(422,"Date range cannot exceed ten years")
+    tz=user_timezone(u)
+    start=datetime.combine(start_date,datetime.min.time(),tz).astimezone(timezone.utc) if start_date else None
+    end=datetime.combine(end_date+timedelta(days=1),datetime.min.time(),tz).astimezone(timezone.utc) if end_date else None
+    return start,end
+
 @app.get("/api/v1/meals")
-def meals(s:Session=Depends(db),u:User=Depends(current_user)):
-    return [meal_payload(m) for m in s.scalars(select(Meal).where(Meal.owner_id==u.id).order_by(Meal.eaten_at.desc()).limit(100))]
+def meals(date_filter:date|None=Query(default=None,alias="date"),s:Session=Depends(db),u:User=Depends(current_user)):
+    query=select(Meal).where(Meal.owner_id==u.id)
+    if date_filter:
+        start,end=local_date_bounds(date_filter,date_filter,u);query=query.where(Meal.eaten_at>=start,Meal.eaten_at<end)
+    return [meal_payload(m) for m in s.scalars(query.order_by(Meal.eaten_at.desc()).limit(500))]
 @app.get("/api/v1/analytics/daily")
 def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
-    try: local_tz=ZoneInfo(u.preferences.get("timezone","UTC"))
-    except ZoneInfoNotFoundError: local_tz=timezone.utc
+    local_tz=user_timezone(u)
     now=datetime.now(local_tz); local_start=now.replace(hour=0,minute=0,second=0,microsecond=0); start=local_start.astimezone(timezone.utc);end=(local_start+timedelta(days=1)).astimezone(timezone.utc)
     day_meals=list(s.scalars(select(Meal).where(Meal.owner_id==u.id,Meal.eaten_at>=start,Meal.eaten_at<end).order_by(Meal.eaten_at)))
     water_total=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
     totals={key:(None if any(getattr(m,key) is None for m in day_meals) else sum(getattr(m,key) for m in day_meals)) for key in ("kcal","protein","carbs","fat")}
     return {"date":local_start.date().isoformat(),"goals":u.goals,"totals":totals,"water_ml":water_total,"meals":[meal_payload(m) for m in day_meals]}
+
+@app.get("/api/v1/analytics/range")
+def analytics_range(days:int=Query(default=7,ge=7,le=90),s:Session=Depends(db),u:User=Depends(current_user)):
+    tz=user_timezone(u);today=datetime.now(tz).date();first=today-timedelta(days=days-1)
+    start,end=local_date_bounds(first,today,u)
+    entries=list(s.scalars(select(Meal).where(Meal.owner_id==u.id,Meal.eaten_at>=start,Meal.eaten_at<end).order_by(Meal.eaten_at)))
+    by_date={}
+    for entry in entries:by_date.setdefault(entry.eaten_at.astimezone(tz).date().isoformat(),[]).append(entry)
+    daily=[]
+    for offset in range(days):
+        day=first+timedelta(days=offset);meals_on_day=by_date.get(day.isoformat(),[])
+        values={k:(None if any(getattr(m,k) is None for m in meals_on_day) else round(sum(getattr(m,k) or 0 for m in meals_on_day),1)) for k in ("kcal","protein","carbs","fat")}
+        daily.append({"date":day.isoformat(),"totals":values,"meal_count":len(meals_on_day)})
+    weights=list(s.scalars(select(WeightRecord).where(WeightRecord.owner_id==u.id,WeightRecord.recorded_at>=start,WeightRecord.recorded_at<end).order_by(WeightRecord.recorded_at)))
+    return {"days":days,"start_date":first.isoformat(),"end_date":today.isoformat(),"daily":daily,"weights":[{"weight_kg":w.weight_kg,"recorded_at":w.recorded_at} for w in weights]}
 @app.post("/api/v1/meals",status_code=201)
 def add_meal(data:MealIn,s:Session=Depends(db),u:User=Depends(current_user)):
     items=normalize_meal_items(data.items,u,s);totals=calculate_meal_totals(items)
@@ -386,13 +415,19 @@ def delete_food(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     if not f: raise HTTPException(404,"Food not found")
     s.delete(f);s.commit()
 @app.get("/api/v1/privacy/export.json")
-def export_json(s:Session=Depends(db),u:User=Depends(current_user)):
-    data=[{"meal_id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at.isoformat(),"items":m.items,"nutrition":{"kcal":m.kcal,"protein_g":m.protein,"carbs_g":m.carbs,"fat_g":m.fat}} for m in s.scalars(select(Meal).where(Meal.owner_id==u.id).order_by(Meal.eaten_at))]
-    return {"exported_at":datetime.now(timezone.utc).isoformat(),"user":{"name":u.name,"email":u.email},"meals":data}
+def export_json(start_date:date|None=None,end_date:date|None=None,s:Session=Depends(db),u:User=Depends(current_user)):
+    query=select(Meal).where(Meal.owner_id==u.id);start,end=local_date_bounds(start_date,end_date,u)
+    if start:query=query.where(Meal.eaten_at>=start)
+    if end:query=query.where(Meal.eaten_at<end)
+    data=[{"meal_id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at.isoformat(),"items":m.items,"nutrition":{"kcal":m.kcal,"protein_g":m.protein,"carbs_g":m.carbs,"fat_g":m.fat}} for m in s.scalars(query.order_by(Meal.eaten_at))]
+    return {"exported_at":datetime.now(timezone.utc).isoformat(),"filters":{"start_date":start_date.isoformat() if start_date else None,"end_date":end_date.isoformat() if end_date else None},"user":{"name":u.name,"email":u.email},"meals":data}
 @app.get("/api/v1/privacy/export.csv")
-def export_csv(s:Session=Depends(db),u:User=Depends(current_user)):
+def export_csv(start_date:date|None=None,end_date:date|None=None,s:Session=Depends(db),u:User=Depends(current_user)):
     stream=io.StringIO();writer=csv.writer(stream);writer.writerow(["meal_id","name","meal_type","eaten_at","kcal","protein_g","carbs_g","fat_g","items_json"])
-    for m in s.scalars(select(Meal).where(Meal.owner_id==u.id).order_by(Meal.eaten_at)):
+    query=select(Meal).where(Meal.owner_id==u.id);start,end=local_date_bounds(start_date,end_date,u)
+    if start:query=query.where(Meal.eaten_at>=start)
+    if end:query=query.where(Meal.eaten_at<end)
+    for m in s.scalars(query.order_by(Meal.eaten_at)):
         vals=[m.id,m.name,m.meal_type,m.eaten_at.isoformat(),m.kcal,m.protein,m.carbs,m.fat,json.dumps(m.items)]
         writer.writerow([("'"+v if isinstance(v,str) and v.startswith(("=","+","-","@","\t","\r")) else v) for v in vals])
     return Response(stream.getvalue(),media_type="text/csv",headers={"Content-Disposition":"attachment; filename=lossfit-nutrition-history.csv"})
