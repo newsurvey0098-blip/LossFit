@@ -112,6 +112,8 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('heading',{name:'Edited oatmeal breakfast'})).toBeVisible();
   await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
 
+  await page.goto('/settings');
+  await expect(page).toHaveURL(/\/profile$/);
   await page.goto('/profile');
   await expect(page.getByLabel('Dietary preference')).toHaveValue('vegan');
   await expect(page.getByLabel('Allergies or foods to avoid')).toHaveValue('soy');

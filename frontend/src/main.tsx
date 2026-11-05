@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { Activity, ArrowRight, CircleUserRound, Flame, Home, Plus, Sparkles, Utensils, Droplets, ChevronRight } from 'lucide-react';
 import './style.css';
 import AuthPage from './AuthPage';
@@ -84,7 +84,7 @@ function App(){return <><a className="skip-link" href="#main-content">Skip to ma
     <Route path="/recipes/new" element={<RecipePage/>}/><Route path="/recipes/:foodId/edit" element={<RecipePage/>}/><Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
     <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
     <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
-    <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
+    <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings" element={<Navigate to="/profile" replace/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
   </Route></Route>
   <Route element={<PublicFrame/>}><Route path="*" element={<NotFound/>}/></Route>
 </Routes></>}
