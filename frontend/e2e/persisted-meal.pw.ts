@@ -2,7 +2,7 @@ import {expect,test} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 
 test('registration, onboarding, private food, and meal persist through the API',async({page})=>{
-  test.setTimeout(60000);
+  test.setTimeout(90000);
   const suffix=crypto.randomUUID();
   await page.goto('/register');
   await page.getByLabel('Name').fill('Browser Test User');
@@ -66,8 +66,27 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Protein (g)').fill('5');
   await page.getByLabel('Carbohydrates (g)').fill('27');
   await page.getByLabel('Fat (g)').fill('3');
+  await page.getByLabel('Serving label').fill('1 bowl');
+  await page.getByLabel('Serving weight (g)').fill('150');
   await page.getByRole('button',{name:'Save food'}).click();
   await expect(page.getByRole('status')).toContainText('Food saved to your private catalogue.');
+
+  await page.goto('/foods');
+  await page.getByLabel('Search foods').fill('Browser test oatmeal');
+  const foodResult=page.getByRole('link',{name:/^Browser test oatmeal cooked/});
+  await expect(foodResult).toBeVisible();
+  await foodResult.click();
+  await expect(page.getByRole('heading',{name:'Browser test oatmeal'})).toBeVisible();
+  await page.getByLabel('Choose a serving').selectOption('1 bowl');
+  await expect(page.getByLabel('Portion size (grams)')).toHaveValue('150');
+  await expect(page.getByText('225.0 kcal')).toBeVisible();
+  await page.getByRole('button',{name:'Add to favorites'}).click();
+  await expect(page.getByRole('button',{name:'Remove from favorites'})).toHaveAttribute('aria-pressed','true');
+  await page.goto('/foods');
+  await page.getByRole('button',{name:'Favorites'}).click();
+  await expect(page.getByRole('link',{name:/^Browser test oatmeal cooked/})).toBeVisible();
+  await page.getByRole('button',{name:'Recent'}).click();
+  await expect(page.getByRole('link',{name:/^Browser test oatmeal cooked/})).toBeVisible();
 
   await page.goto('/recipes/new');
   await page.getByLabel('Recipe name').fill('Browser batch porridge');
@@ -111,6 +130,22 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.reload();
   await expect(page.getByRole('heading',{name:'Edited oatmeal breakfast'})).toBeVisible();
   await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
+
+  await page.goto('/log');
+  await expect(page.getByText('Edited oatmeal breakfast')).toBeVisible();
+  await page.goto('/learn');
+  await expect(page.getByRole('heading',{name:'Nutrition learning'})).toBeVisible();
+  await page.getByRole('link',{name:'Read lesson'}).first().click();
+  await expect(page.getByRole('heading',{level:1})).toBeVisible();
+  await page.locator('input[name="answer"]').first().check();
+  await page.getByRole('button',{name:'Check answer'}).click();
+  await expect(page.getByRole('status')).toContainText(/Correct\.|Not quite\./);
+  await page.goto('/scan');
+  await expect(page.getByRole('heading',{name:'Scan a meal'})).toBeVisible();
+  await expect(page.getByText('Image analysis is not configured on this installation.')).toBeVisible();
+  await page.goto('/settings/accounts');
+  await expect(page.getByRole('heading',{name:'Connected accounts'})).toBeVisible();
+  await expect(page.getByText('Unavailable',{exact:true})).toBeVisible();
 
   await page.goto('/settings');
   await expect(page).toHaveURL(/\/profile$/);
