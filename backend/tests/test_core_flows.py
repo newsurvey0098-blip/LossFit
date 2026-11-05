@@ -706,12 +706,16 @@ def test_scanner_validates_private_image_resolves_candidates_and_confirms_once(m
         assert owner.get(f'/api/v1/scans/{scan_id}/image').status_code==200
         register(other)
         assert other.get(f'/api/v1/scans/{scan_id}').status_code==404
+        assert other.get(f'/api/v1/scans/{scan_id}/image').status_code==404
         other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
         assert other.delete(f'/api/v1/scans/{scan_id}',headers=other_headers).status_code==404
         incomplete=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[],"removed_candidate_ids":[]})
         assert incomplete.status_code==422
         confirmed=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"candidate_id":"0","food_id":food['id'],"grams":118}],"removed_candidate_ids":[]})
         assert confirmed.status_code==200 and confirmed.json()['meal']['kcal']==105.02
+        assert len(owner.get('/api/v1/privacy/export.json').json()['meals'])==1
+        assert other.get('/api/v1/privacy/export.json').json()['meals']==[]
+        assert 'Lunch' not in other.get('/api/v1/privacy/export.csv').text
         repeat=owner.post(f'/api/v1/scans/{scan_id}/confirm',headers=headers,json={"name":"Lunch duplicate","meal_type":"lunch","items":[{"candidate_id":"0","food_id":food['id'],"grams":118}],"removed_candidate_ids":[]})
         assert repeat.status_code==200 and repeat.json()['already_confirmed'] is True
         assert repeat.json()['meal']['id']==confirmed.json()['meal']['id']
