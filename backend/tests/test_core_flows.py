@@ -6,6 +6,7 @@ from PIL import Image
 from fastapi.testclient import TestClient
 from backend.app.main import app
 import backend.app.main as main
+from backend.app.knowledge import cosine
 
 def register(client):
     suffix=uuid4().hex
@@ -202,6 +203,60 @@ def test_learning_lessons_are_sourced_and_progress_is_private_and_persisted():
         assert progress['score']==1 and progress['version']==1
         register(other)
         assert all(item['progress'] is None for item in other.get('/api/v1/learning').json())
+
+def test_knowledge_retrieval_cites_latest_reviewed_source_version():
+    with main.SessionLocal() as session:
+        older=main.KnowledgeSource(source_key='test-label-guide',version=1,title='Older label guide',organization='Test agency',url='https://example.test/old',content_hash='1'*64)
+        newer=main.KnowledgeSource(source_key='test-label-guide',version=2,title='Current label guide',organization='Test agency',url='https://example.test/current',content_hash='2'*64)
+        unrelated=main.KnowledgeSource(source_key='test-hydration-guide',version=1,title='Water guide',organization='Test agency',url='https://example.test/water',content_hash='3'*64)
+        session.add_all([older,newer,unrelated]);session.flush()
+        session.add_all([
+            main.KnowledgeChunk(source_id=older.id,chunk_index=0,content='FDA Nutrition Facts label serving size information.',embedding=None),
+            main.KnowledgeChunk(source_id=newer.id,chunk_index=0,content='FDA Nutrition Facts label serving size and percent Daily Value details.',embedding=None),
+            main.KnowledgeChunk(source_id=unrelated.id,chunk_index=0,content='Water intake changes with activity and hot weather.',embedding=None),
+        ]);session.commit()
+        matches=main.retrieve_knowledge(session,'FDA nutrition facts serving size percent daily value')
+        assert matches[0]['source']['title']=='Current label guide'
+        assert matches[0]['source']['version']==2 and matches[0]['ref']=='K1'
+        assert main.retrieve_knowledge(session,'information about astronomy galaxies')==[]
+
+def test_assistant_includes_retrieved_evidence_and_persists_citations(monkeypatch):
+    captured={}
+    evidence=[{"ref":"K1","text":"Serving size on a nutrition label is not a recommendation of how much to eat.","source":{"title":"FDA label guide","organization":"U.S. Food and Drug Administration","url":"https://www.fda.gov/food/nutrition-facts-label/how-understand-and-use-nutrition-facts-label","version":1}}]
+    class FakeResponse:
+        def raise_for_status(self): pass
+        def json(self): return {"choices":[{"message":{"content":"A label serving is a reference amount, not a suggested portion [K1]."}}]}
+    class FakeClient:
+        def __init__(self,timeout): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def post(self,url,headers,json): captured['messages']=json['messages'];return FakeResponse()
+    monkeypatch.setattr(main.httpx,'Client',FakeClient)
+    monkeypatch.setattr(main,'retrieve_knowledge',lambda session,query:evidence)
+    monkeypatch.setenv('AI_BASE_URL','https://provider.invalid/v1');monkeypatch.setenv('AI_API_KEY','test-only-key');monkeypatch.setenv('AI_MODEL','test-model')
+    with TestClient(app) as client:
+        register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
+        response=client.post('/api/v1/assistant',headers=headers,json={"conversation_id":conversation['id'],"message":"What does serving size mean?"})
+        assert response.status_code==200 and response.json()['sources'][0]['ref']=='K1'
+        assert 'Serving size on a nutrition label' in captured['messages'][0]['content']
+        persisted=client.get(f"/api/v1/assistant/conversations/{conversation['id']}").json()['messages'][-1]
+        assert persisted['citations'][0]['url']==evidence[0]['source']['url']
+
+def test_embedding_adapter_validates_dimensions_and_sorts_provider_results(monkeypatch):
+    monkeypatch.setenv('AI_BASE_URL','https://embedding.provider.test/v1');monkeypatch.setenv('AI_API_KEY','test-only-key');monkeypatch.setenv('EMBEDDING_MODEL','test-embedding-model')
+    class FakeResponse:
+        def raise_for_status(self): pass
+        def json(self): return {"data":[{"index":1,"embedding":[0.0,1.0]},{"index":0,"embedding":[1.0,0.0]}]}
+    class FakeClient:
+        def __init__(self,timeout): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def post(self,*args,**kwargs): return FakeResponse()
+    monkeypatch.setattr(main.httpx,'Client',FakeClient)
+    vectors,model=main.request_embeddings(['first','second'])
+    assert model=='test-embedding-model' and vectors==[[1.0,0.0],[0.0,1.0]]
+    assert cosine([1.0,0.0],[1.0,0.0])==1.0 and cosine([1.0],[0.0,1.0])==0.0
 
 def test_forgot_password_response_does_not_reveal_account_existence():
     with TestClient(app) as client:

@@ -1,0 +1,26 @@
+[
+  {
+    "source_key": "fda-nutrition-facts-label",
+    "version": 1,
+    "title": "How to Understand and Use the Nutrition Facts Label",
+    "organization": "U.S. Food and Drug Administration",
+    "url": "https://www.fda.gov/food/nutrition-facts-label/how-understand-and-use-nutrition-facts-label",
+    "text": "A Nutrition Facts label lists serving information, calories, nutrients, and percent Daily Values. Serving size reflects the amount people typically eat or drink; it is not a recommendation for how much to consume. Nutrient amounts on the label refer to the listed serving. If a person eats two servings, they consume twice the listed calories and nutrients. Percent Daily Value (%DV) describes how much a nutrient in one serving contributes to a daily reference amount. FDA's general guide treats 5% DV or less per serving as low and 20% DV or more as high. %DV can help compare similar products when serving sizes are comparable. FDA materials identify dietary fiber, vitamin D, calcium, iron, and potassium as nutrients to get more of, and saturated fat, sodium, and added sugars as nutrients to limit more often. Individual needs vary; a label is information to support choices, not a personalized medical plan."
+  },
+  {
+    "source_key": "cdc-water-healthier-drinks",
+    "version": 1,
+    "title": "About Water and Healthier Drinks",
+    "organization": "U.S. Centers for Disease Control and Prevention",
+    "url": "https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/",
+    "text": "Water is important for health and can help prevent dehydration. Plain water contains no calories, and replacing sugary drinks with water can reduce calorie intake. Daily water needs vary by age, sex, pregnancy or breastfeeding status, and activity level. Total water intake comes mostly from water and other beverages, and water-rich foods such as many fruits and vegetables also contribute. People may need more fluids in hot climates, with greater physical activity, fever, vomiting, or diarrhea. These are general observations, not a precise intake prescription for an individual. LossFit records user-entered drinks and does not measure hydration status."
+  },
+  {
+    "source_key": "cdc-adult-activity-guidelines",
+    "version": 1,
+    "title": "Adult Activity: An Overview",
+    "organization": "U.S. Centers for Disease Control and Prevention",
+    "url": "https://www.cdc.gov/physical-activity-basics/guidelines/adults.html",
+    "text": "CDC guidance says adults need at least 150 minutes of moderate-intensity physical activity each week, such as brisk walking, or 75 minutes of vigorous activity, or an equivalent combination. Adults also need muscle-strengthening activity on at least two days each week. Activity can be spread across the week rather than done all at once. Adults who sit less and do any amount of moderate- to vigorous-intensity activity gain some health benefits. People can choose activities that fit their abilities and circumstances. These population-level guidelines are not an individualized exercise prescription."
+  }
+]

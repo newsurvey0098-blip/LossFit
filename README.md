@@ -19,6 +19,8 @@ Authentication returns a 20-minute access token held only in frontend memory. A 
 
 Run repeatable API tests with `scripts/test.ps1` after the isolated PostgreSQL cluster is running. The script creates a uniquely named database, applies all migrations, runs the suite, and retains that database so failures can be inspected.
 
+Reviewed nutrition documents are curated in `backend/knowledge/sources.json`; ingest them with `.venv/Scripts/python.exe scripts/ingest-knowledge.py` after migrations. Each source version is immutable: edit the text only when you also increase its version. Set backend-only `EMBEDDING_MODEL` alongside the AI provider URL/key to create embeddings. Without that setting the portable lexical retrieval adapter is used. The assistant supplies source markers and links from retrieved chunks and is instructed to abstain on unsupported general nutrition claims. Live provider answers and embeddings still require separate verification.
+
 Account deletion removes the account's application records in one database transaction and records a keyed email digest in a restricted ledger. Configure vision credentials in backend-only `AI_BASE_URL`, `AI_API_KEY`, and `VISION_MODEL` values to enable the photo scanner. A restore procedure must replay the deletion ledger against restored user tables before serving traffic. Database backups may retain old personal data until their configured retention expires; the ledger is intended to prevent those restores from reactivating deleted accounts.
 
 ## Production operations
