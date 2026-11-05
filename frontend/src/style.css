@@ -22,3 +22,6 @@
 .food-tabs{display:flex;gap:.55rem;flex-wrap:wrap;margin:1rem 0}.food-tabs .selected{border-color:var(--blue);color:var(--blue)}.favorite-toggle{color:var(--lime);flex:0 0 auto}.favorite-toggle[aria-pressed="true"]{background:rgba(171,224,79,.12)}
 
 .account-card{padding:22px;margin:20px 0}.account-card .sectionhead{align-items:flex-start;margin-bottom:16px}.account-card .sectionhead p{margin:8px 0 0}.account-unavailable{color:#e8c680;border-color:#51422a}
+
+.skip-link{position:fixed;left:12px;top:-100px;z-index:100;padding:12px 18px;border-radius:8px;background:#c5ef68;color:#111214;font-weight:700}.skip-link:focus{top:12px}
+:focus-visible{outline:2px solid #c4b5fd;outline-offset:3px}main:focus{outline:none}html{scroll-padding-block:90px}input,select,textarea,button,a{scroll-margin-block:100px}.actions{flex-wrap:wrap}.manualform select{max-width:100%;min-width:0}main{padding-bottom:110px}.bottom{bottom:max(12px,env(safe-area-inset-bottom))}.top-right{flex-shrink:0}

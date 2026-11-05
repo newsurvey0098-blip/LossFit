@@ -18,18 +18,21 @@ import LearningPage from './LearningPage';
 import ConnectedAccountsPage from './ConnectedAccountsPage';
 import PrivateRoute from './PrivateRoute';
 
+function usePageFocus(){const {pathname}=useLocation();React.useEffect(()=>{document.getElementById('main-content')?.focus({preventScroll:true});window.scrollTo(0,0)},[pathname]);}
+function PublicFrame(){usePageFocus();return <main id="main-content" tabIndex={-1}><Outlet/></main>;}
+
 function Shell({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
+  const location = useLocation();usePageFocus();
   return <>
     <header className="top">
       <Link to="/home" className="brand"><span className="mark"><Flame size={19} /></span>LossFit</Link>
-      <div className="top-right"><span className="date">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}).toUpperCase()}</span><Link className="avatar" to="/profile" aria-label="Profile settings">J</Link></div>
+      <div className="top-right"><Link className="icon" to="/assistant" aria-label="Ask the nutrition assistant"><Sparkles size={20}/></Link><span className="date">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}).toUpperCase()}</span><Link className="avatar" to="/profile" aria-label="Profile settings">J</Link></div>
     </header>
-    <main>{children}</main>
+    <main id="main-content" tabIndex={-1}>{children}</main>
     <nav className="bottom" aria-label="Main navigation">
-      {[[Home,'Home','/home'],[Activity,'Insights','/analytics'],[Plus,'Add','/meals/new'],[Utensils,'Foods','/foods'],[CircleUserRound,'Profile','/profile']].map(([Icon,label,path]:any)=><Link key={label} className={`navitem ${location.pathname===path?'active':''} ${label==='Add'?'addnav':''}`} to={path}><Icon size={label==='Add'?22:19}/><span>{label}</span></Link>)}
+      {[[Home,'Home','/home'],[Activity,'Insights','/analytics'],[Plus,'Add','/meals/new'],[Utensils,'Foods','/foods'],[CircleUserRound,'Profile','/profile']].map(([Icon,label,path]:any)=><Link key={label} aria-current={(location.pathname===path||(path==='/foods'&&location.pathname.startsWith('/foods/')))?'page':undefined} className={`navitem ${location.pathname===path?'active':''} ${label==='Add'?'addnav':''}`} to={path}><Icon size={label==='Add'?22:19}/><span>{label}</span></Link>)}
     </nav>
-    <Link className="assistant-fab" to="/assistant" aria-label="Ask the nutrition assistant"><Sparkles size={20}/></Link>
+
   </>;
 }
 
@@ -73,16 +76,16 @@ function Dashboard() {
 
 function LandingPage(){return <section className="card simple"><div className="watericon"><Flame/></div><p className="eyebrow">LOSSFIT · EVERYDAY NUTRITION</p><h1>Know what you eat.</h1><p className="muted">Build a clearer picture of your meals, nutrition, and daily habits with a private food log and a helpful nutrition assistant.</p><div className="actions"><Link className="button primary" to="/register">Create your account <ArrowRight size={16}/></Link><Link className="button" to="/login">Sign in</Link></div></section>}
 function NotFound(){return <section className="card simple"><p className="eyebrow">404</p><h1>Page not found</h1><p className="muted">That LossFit page isn’t available.</p><Link className="button primary" to="/home">Back to today</Link></section>}
-function App(){return <Routes>
+function App(){return <><a className="skip-link" href="#main-content">Skip to main content</a><Routes><Route element={<PublicFrame/>}>
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>
-  <Route element={<PrivateRoute/>}><Route element={<PrivateShell/>}>
+  </Route><Route element={<PrivateRoute/>}><Route element={<PrivateShell/>}>
     <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
     <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
     <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
     <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
     <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
   </Route></Route>
-  <Route path="*" element={<NotFound/>}/>
-</Routes>}
+  <Route element={<PublicFrame/>}><Route path="*" element={<NotFound/>}/></Route>
+</Routes></>}
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><BrowserRouter><App/></BrowserRouter></React.StrictMode>);
