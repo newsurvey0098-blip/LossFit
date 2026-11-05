@@ -41,6 +41,19 @@ def test_cookie_mutations_require_csrf_and_origin():
         good=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
         assert good.status_code==200 and good.json()['access_token']
 
+def test_production_cookie_flags_and_restricted_paths(monkeypatch):
+    monkeypatch.setenv('ENVIRONMENT','production')
+    with TestClient(app,base_url='https://testserver') as client:
+        response=client.post('/api/v1/auth/register',json={"name":"Cookie flags","email":f"cookie-{uuid4().hex}@example.com","password":"safe-password-987"})
+        assert response.status_code==201
+        cookies=response.headers.get_list('set-cookie')
+        refresh=next(cookie for cookie in cookies if cookie.startswith('lf_refresh='))
+        csrf=next(cookie for cookie in cookies if cookie.startswith('lf_csrf='))
+        assert 'HttpOnly' in refresh and 'Secure' in refresh and 'SameSite=lax' in refresh and 'Path=/api/v1/auth' in refresh
+        assert 'HttpOnly' not in csrf and 'Secure' in csrf and 'SameSite=lax' in csrf and 'Path=/' in csrf
+        # The refresh endpoint is the cookie-authenticated mutation. The separate
+        # CSRF test verifies that it rejects absent tokens and untrusted origins.
+
 def test_google_account_linking_reports_missing_credentials_and_requires_reauthentication(monkeypatch):
     monkeypatch.delenv('GOOGLE_CLIENT_ID',raising=False);monkeypatch.delenv('GOOGLE_CLIENT_SECRET',raising=False);monkeypatch.delenv('GOOGLE_REDIRECT_URI',raising=False)
     with TestClient(app) as client:
