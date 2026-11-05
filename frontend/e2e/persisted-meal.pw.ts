@@ -37,6 +37,24 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.goto('/analytics');
   await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
 
+  await page.goto('/assistant');
+  await page.getByRole('button',{name:'Start a conversation',exact:true}).click();
+  await expect(page).toHaveURL(/\/assistant\/\d+$/);
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'How can I help?'})).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Delete New conversation',exact:true}).click();
+  await expect(page).toHaveURL(/\/assistant$/);
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Delete New conversation',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Start a conversation',exact:true}).click();
+  await expect(page).toHaveURL(/\/assistant\/\d+$/);
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Clear all',exact:true}).click();
+  await expect(page).toHaveURL(/\/assistant$/);
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Delete New conversation',exact:true})).toHaveCount(0);
+
   await page.goto('/foods/new');
   await page.getByLabel('Food name').fill('Browser test oatmeal');
   await page.getByLabel('Preparation state').selectOption('cooked');
