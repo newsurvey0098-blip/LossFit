@@ -152,6 +152,34 @@ def test_assistant_meal_action_previews_catalogue_snapshot_then_commits_once():
         assert other.post('/api/v1/assistant/actions/preview',headers=other_headers,json=forbidden).status_code==422
         assert other.post(f"/api/v1/assistant/actions/{preview.json()['id']}/confirm",headers=other_headers).status_code==404
 
+def test_remaining_auth_scanner_and_assistant_rate_limits_are_enforced(monkeypatch):
+    monkeypatch.setattr(main,'request_ip',lambda request:'dedicated-rate-limit-regression-client')
+    monkeypatch.setenv('GOOGLE_CLIENT_ID','test-client.apps.googleusercontent.com');monkeypatch.setenv('GOOGLE_CLIENT_SECRET','test-secret');monkeypatch.setenv('GOOGLE_REDIRECT_URI','http://127.0.0.1:3001/api/v1/auth/google/callback')
+    with TestClient(app) as client:
+        user=register(client);headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        def protected_post(path,**kwargs):
+            headers['x-csrf-token']=client.cookies['lf_csrf']
+            return client.post(path,headers=headers,**kwargs)
+        body={"name":"Rate Limit User","email":user['email'],"password":"safe-password-987"}
+        registration=[client.post('/api/v1/auth/register',json=body).status_code for _ in range(100)]
+        assert registration==[409]*99+[429]
+        refresh=[protected_post('/api/v1/auth/refresh').status_code for _ in range(121)]
+        assert refresh==[200]*120+[429]
+        invalid_scan_body={"name":"Scan","meal_type":"lunch","items":[],"removed_candidate_ids":[]}
+        scan_confirms=[protected_post('/api/v1/scans/987654321/confirm',json=invalid_scan_body).status_code for _ in range(21)]
+        assert scan_confirms==[404]*20+[429]
+        conversation=protected_post('/api/v1/assistant/conversations').json()
+        preview_body={"conversation_id":conversation['id'],"action":"log_water","water_ml":100,"idempotency_key":None}
+        preview_statuses=[]
+        for _ in range(21):
+            preview_body['idempotency_key']=uuid4().hex
+            preview_statuses.append(protected_post('/api/v1/assistant/actions/preview',json=preview_body).status_code)
+        assert preview_statuses==[201]*20+[429]
+        confirm_statuses=[protected_post(f"/api/v1/assistant/actions/{'f'*32}/confirm").status_code for _ in range(31)]
+        assert confirm_statuses==[404]*30+[429]
+        google_statuses=[protected_post('/api/v1/auth/google/link/start',json={"password":"safe-password-987"}).status_code for _ in range(6)]
+        assert google_statuses==[200]*5+[429]
+
 def test_assistant_action_preview_is_private_cancelable_and_rechecked_before_write():
     with TestClient(app) as owner,TestClient(app) as other:
         register(owner);owner_headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
