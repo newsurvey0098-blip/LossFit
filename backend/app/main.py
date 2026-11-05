@@ -23,9 +23,12 @@ from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, Fo
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
+from .monitoring import RequestMonitoring
+from .production import validate_production_environment
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 
 load_dotenv()
+validate_production_environment(os.environ)
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit")
 JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deploying")
 engine = create_engine(DB_URL, pool_pre_ping=True)
@@ -337,6 +340,7 @@ if os.getenv("ENVIRONMENT")=="production" and len(os.getenv("DELETION_LEDGER_SEC
 if os.getenv("ENVIRONMENT")=="production" and google_oauth_configured() and not os.environ["GOOGLE_REDIRECT_URI"].lower().startswith("https://"):
     raise RuntimeError("Production Google OAuth requires an HTTPS redirect URI")
 app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(","),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Authorization","Content-Type","X-CSRF-Token"])
+app.add_middleware(RequestMonitoring)
 @app.middleware("http")
 async def csrf_protection(request:Request,call_next):
     if request.method in {"POST","PUT","PATCH","DELETE"} and request.url.path not in {"/api/v1/auth/login","/api/v1/auth/register"}:

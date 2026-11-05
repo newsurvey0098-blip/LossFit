@@ -23,7 +23,7 @@ try {
   & (Join-Path $root '.venv/Scripts/python.exe') -m alembic -c backend/alembic.ini upgrade head
   if ($LASTEXITCODE -ne 0) { throw 'Could not migrate the disposable E2E database.' }
 
-  $apiProcess = Start-Process -FilePath (Join-Path $root '.venv/Scripts/python.exe') -ArgumentList '-m','uvicorn','backend.app.main:app','--host','127.0.0.1','--port',"$apiPort" -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+  $apiProcess = Start-Process -FilePath (Join-Path $root '.venv/Scripts/python.exe') -ArgumentList '-m','uvicorn','backend.app.main:app','--host','127.0.0.1','--port',"$apiPort",'--no-access-log' -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
   Start-Sleep -Milliseconds 500
   if ($apiProcess.HasExited) { throw "API process exited during startup. See $errLog" }
   $healthy = $false

@@ -31,6 +31,8 @@ Account deletion removes the account's application records in one database trans
 
 ## Production operations
 
+See [deployment and monitoring](docs/deployment.md) for the production environment template, fail-closed HTTPS/secret checks, sanitized JSON request events, production launcher, reverse-proxy template, and verification gates. No deployment or external alert destination has been verified.
+
 Set `ENVIRONMENT=production`, a random secret, HTTPS origins, restricted CORS, provider credentials only in the backend secret store, and private upload storage outside the web root. Enable database backups with `pg_dump -Fc`; restore to an isolated database with `pg_restore --clean --if-exists`. Establish encrypted offsite retention and deletion-ledger replay before production. Configure error monitoring with request-body and credential scrubbing.
 
 See [backup and restore procedures](docs/backup-restore.md) for Windows PowerShell commands, protected deletion-ledger export, dry-run review, replay, and private-file cleanup.
