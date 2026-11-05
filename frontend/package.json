@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:local": "powershell.exe -ExecutionPolicy Bypass -File ../scripts/e2e-local.ps1"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.0.0",
