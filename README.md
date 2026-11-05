@@ -39,4 +39,4 @@ See [backup and restore procedures](docs/backup-restore.md) for Windows PowerShe
 
 ## Implementation status
 
-See [screen inventory](docs/screen-inventory.md) and [verification record](docs/verification.md). Current screens and endpoints are foundations; the complete workflows and production security described in the requirements remain outstanding.
+See [screen inventory](docs/screen-inventory.md), [verification record](docs/verification.md), and [GitHub milestone workflow](docs/github-workflow.md). LossFit has persisted account, nutrition, meal, assistant, analytics, privacy, and learning workflows with automated API and browser verification. The acceptance record identifies features that remain partial or unavailable. Live AI/OAuth integrations and production deployment have not been verified; the application is not yet production ready.
