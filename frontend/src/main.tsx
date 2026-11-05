@@ -14,6 +14,7 @@ import WeightPage from './WeightPage';
 import { ForgotPasswordPage, ResetPasswordPage } from './PasswordPages';
 import { AnalyticsPage, FoodLogPage } from './AnalyticsPages';
 import { ScannerPage, ScannerReviewPage } from './ScanPages';
+import LearningPage from './LearningPage';
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -49,7 +50,7 @@ function Dashboard() {
   const remaining=totals.kcal==null?null:Math.max(goals.calories-totals.kcal,0);
   const caloriesPct=totals.kcal==null?0:Math.min(totals.kcal/goals.calories*100,100);
   return <>
-    <div className="welcome"><div><p className="eyebrow">YOUR DAILY SNAPSHOT</p><h1>Good morning, {name}<span className="green">.</span></h1><p className="muted">A steady day starts with small choices.</p></div><div className="actions"><Link className="textlink" to="/log">Today’s log <ArrowRight size={15}/></Link><Link className="button primary" to="/meals/new">Log a meal</Link></div></div>
+    <div className="welcome"><div><p className="eyebrow">YOUR DAILY SNAPSHOT</p><h1>Good morning, {name}<span className="green">.</span></h1><p className="muted">A steady day starts with small choices.</p></div><div className="actions"><Link className="textlink" to="/log">Today’s log <ArrowRight size={15}/></Link><Link className="textlink" to="/learn">Learn <ArrowRight size={15}/></Link><Link className="button primary" to="/meals/new">Log a meal</Link></div></div>
     {error&&<p role="alert" className="error">{error} <Link to="/login">Sign in</Link></p>}
     {busy?<p role="status" className="muted">Loading your day…</p>:<>
       <section className="hero grid">
@@ -71,7 +72,7 @@ function NotFound(){return <section className="card simple"><p className="eyebro
 function App(){return <Shell><Routes>
   <Route path="/" element={<LandingPage/>}/><Route path="/login" element={<AuthPage/>}/><Route path="/forgot-password" element={<ForgotPasswordPage/>}/><Route path="/reset-password" element={<ResetPasswordPage/>}/><Route path="/register" element={<AuthPage register/>}/>
   <Route path="/onboarding/body" element={<OnboardingPage/>}/><Route path="/onboarding/preferences" element={<OnboardingPage/>}/><Route path="/weight" element={<WeightPage/>}/><Route path="/home" element={<Dashboard/>}/>
-  <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/>
+  <Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
   <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
   <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
   <Route path="/profile" element={<ProfilePage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/><Route path="*" element={<NotFound/>}/>

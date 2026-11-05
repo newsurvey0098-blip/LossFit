@@ -187,6 +187,22 @@ def test_refresh_rotates_tokens_and_logout_revokes_current_session():
         client.cookies.set('lf_csrf',new_csrf,path='/')
         assert client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf}).status_code==401
 
+def test_learning_lessons_are_sourced_and_progress_is_private_and_persisted():
+    with TestClient(app) as learner, TestClient(app) as other:
+        register(learner)
+        lessons=learner.get('/api/v1/learning').json()
+        assert len(lessons)>=3 and all(item['sources'] for item in lessons)
+        lesson=learner.get('/api/v1/learning/read-a-food-label').json()
+        assert 'answer' not in lesson['quiz']
+        assert learner.get('/api/v1/learning/read-a-food-label?detailed=true').json()['content']!=lesson['content']
+        csrf=learner.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        result=learner.post('/api/v1/learning/read-a-food-label/complete',headers=headers,json={"answers":[1]})
+        assert result.status_code==200 and result.json()['correct'] is True
+        progress=next(item['progress'] for item in learner.get('/api/v1/learning').json() if item['slug']=='read-a-food-label')
+        assert progress['score']==1 and progress['version']==1
+        register(other)
+        assert all(item['progress'] is None for item in other.get('/api/v1/learning').json())
+
 def test_forgot_password_response_does_not_reveal_account_existence():
     with TestClient(app) as client:
         unknown=client.post('/api/v1/auth/forgot-password',json={"email":"nobody@example.com"})

@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import create_engine, String, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
+from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit")
 JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deploying")
@@ -140,6 +141,15 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(String(8000))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class LessonProgress(Base):
+    __tablename__ = "lesson_progress"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    lesson_slug: Mapped[str] = mapped_column(String(80))
+    lesson_version: Mapped[int] = mapped_column()
+    score: Mapped[int] = mapped_column()
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (UniqueConstraint("owner_id", "lesson_slug", name="uq_lesson_progress_owner_slug"),)
 
 class RegisterIn(BaseModel): name: str = Field(min_length=1,max_length=100); email: EmailStr; password: str = Field(min_length=10,max_length=128)
 class LoginIn(BaseModel): email: EmailStr; password: str
@@ -165,6 +175,7 @@ class ScanConfirmIn(BaseModel): name:str=Field(min_length=1,max_length=160,patte
 class DeleteAccountIn(BaseModel): password:str=Field(min_length=1,max_length=128); confirmation:str
 class ProfileIn(BaseModel): name:str|None=Field(default=None,min_length=1,max_length=100); goals:dict[str,float]|None=None
 class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000)
+class QuizSubmissionIn(BaseModel): answers:list[int]=Field(min_length=1,max_length=10)
 class OnboardingIn(BaseModel):
     age:int=Field(ge=18,le=100); sex:str=Field(pattern="^(female|male|other)$"); height_cm:float=Field(ge=120,le=230); weight_kg:float=Field(ge=35,le=300)
     goal:str=Field(pattern="^(weight_loss|maintenance|muscle_gain|balanced)$"); activity:str=Field(pattern="^(sedentary|light|moderate|active)$")
@@ -671,6 +682,29 @@ def delete_conversation(conversation_id:int,s:Session=Depends(db),u:User=Depends
     c=s.scalar(select(Conversation).where(Conversation.id==conversation_id,Conversation.owner_id==u.id))
     if not c:raise HTTPException(404,"Conversation not found")
     s.delete(c);s.commit()
+@app.get("/api/v1/learning")
+def learning_catalogue(s:Session=Depends(db),u:User=Depends(current_user)):
+    progress={p.lesson_slug:p for p in s.scalars(select(LessonProgress).where(LessonProgress.owner_id==u.id))}
+    return [{**public_lesson(lesson),"progress":({"score":progress[lesson["slug"]].score,"completed_at":progress[lesson["slug"]].completed_at,"version":progress[lesson["slug"]].lesson_version} if lesson["slug"] in progress else None)} for lesson in LESSONS]
+@app.get("/api/v1/learning/{slug}")
+def learning_lesson(slug:str,detailed:bool=Query(default=False),s:Session=Depends(db),u:User=Depends(current_user)):
+    lesson=LESSON_BY_SLUG.get(slug)
+    if not lesson:raise HTTPException(404,"Lesson not found")
+    progress=s.scalar(select(LessonProgress).where(LessonProgress.owner_id==u.id,LessonProgress.lesson_slug==slug))
+    return {**public_lesson(lesson,detailed=detailed),"progress":({"score":progress.score,"completed_at":progress.completed_at,"version":progress.lesson_version} if progress else None)}
+@app.post("/api/v1/learning/{slug}/complete")
+def complete_lesson(slug:str,data:QuizSubmissionIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    lesson=LESSON_BY_SLUG.get(slug)
+    if not lesson:raise HTTPException(404,"Lesson not found")
+    if len(data.answers)!=1 or data.answers[0] not in range(len(lesson["quiz"]["options"])):raise HTTPException(422,"Submit one valid answer for this lesson")
+    score=int(data.answers[0]==lesson["quiz"]["answer"]);now=datetime.now(timezone.utc)
+    progress=s.scalar(select(LessonProgress).where(LessonProgress.owner_id==u.id,LessonProgress.lesson_slug==slug).with_for_update())
+    if progress is None:
+        progress=LessonProgress(owner_id=u.id,lesson_slug=slug,lesson_version=lesson["version"],score=score,completed_at=now);s.add(progress)
+    else:
+        progress.lesson_version=lesson["version"];progress.score=score;progress.completed_at=now
+    s.commit()
+    return {"lesson_slug":slug,"score":score,"total":1,"correct":score==1,"explanation":lesson["quiz"]["explanation"],"completed_at":now}
 @app.post("/api/v1/assistant")
 def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"assistant_user",str(u.id),15,60)
