@@ -7,9 +7,9 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 | Reference | Final route | Component | Required layout and interactions | Current implementation / verification |
 |---|---|---|---|---|
 | `authentication_forgot_password` | `/forgot-password` | `ForgotPasswordPage` | Centered credential form; generic submission status; return-to-login link; labels, validation, keyboard focus | Implemented; SMTP delivery unavailable unless configured; API tested, browser unverified |
-| `food_detail_animated` | `/foods/:foodId` | `FoodDetailPage` | Food image/detail, nutrition, serving controls, add-to-meal action; animation respects reduced motion | Shared with food detail; portion and meal logging integrated; full catalogue provenance outstanding |
+| `food_detail_animated` | `/foods/:foodId` | `FoodDetailPage` | Food image/detail, nutrition, serving controls, add-to-meal action; animation respects reduced motion | Shared with food detail; USDA catalogue provenance and nutrient availability are displayed; serving and meal logging integrated; browser unverified |
 | `authentication_log_in` | `/login` | `AuthPage` | Email/password form, error/success state, recovery and registration links | Implemented and API tested; browser unverified |
-| `food_detail` | `/foods/:foodId` | `FoodDetailPage` | Food detail with portion and meal assignment | Implemented for available catalogue records; serving shortcuts, nutrition source labels, and add-to-meal API integrated; browser unverified |
+| `food_detail` | `/foods/:foodId` | `FoodDetailPage` | Food detail with portion and meal assignment | 5,856 USDA Foundation/FNDDS records imported; search/detail API returns source IDs, links, per-nutrient statuses, availability notes, preparation state, and household portions; browser unverified |
 | `authentication_link_google_account` | `/settings/accounts` | `ConnectedAccountsPage` | Connected methods, reauthentication, safe link/unlink, unavailable-provider explanation | Not implemented; Google credentials/provider unavailable |
 | `welcome_to_nutritrack_ai_animated` | `/` | `LandingPage` | Brand introduction, clear sign-in/register actions, reduced-motion intro | Partial placeholder only; functional marketing/onboarding entry outstanding |
 | `welcome_to_nutritrack_ai_updated` | `/` | `LandingPage` | Updated welcome layout consistent with brand and accessible navigation | Partial placeholder only |
@@ -17,7 +17,7 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 | `meal_detail_lunch` | `/meals/new`, `/meals/:mealId` | `NewMealPage`, `MealDetailPage` | Meal composition, detail, editable items/portions, save and delete with feedback | Multi-food creation, serving selection, add/remove/edit items, time/type/name editing, save and delete implemented against API; backend ownership-tested; browser unverified |
 | `ai_nutrition_assistant` | `/assistant/:conversationId?` | `AssistantPage` | Conversation list, new/delete/clear, chat history, retry, loading, outage states and source citations | Persisted API, conversation citations, curated retrieval and abstention prompt are implemented; provider behavior mocked in tests; live provider and embeddings unverified |
 | Nutrition learning topics | `/learn`, `/learn/:slug` | `LearningPage` | Source-linked short lessons, simple/detailed explanations, keyboard-operable knowledge checks, results and progress | Three evidence-linked guides and private per-user completion scores are implemented and API-tested; browser unverified |
-| `food_items` | `/foods` | `FoodsPage` | Searchable catalogue, recent/favorite states, food navigation, add custom food | Search includes aliases; private custom-food create/edit/delete and servings implemented; public imported catalogue, favorites/recent outstanding |
+| `food_items` | `/foods` | `FoodsPage` | Searchable catalogue, recent/favorite states, food navigation, add custom food | Public USDA Foundation/FNDDS catalogue imported (5,856 records); database search includes aliases and is tested beyond the first 60 sorted items; private custom-food create/edit/delete and servings implemented; favorites/recent outstanding |
 | `food_log_analytics` | `/log`, `/analytics` | `FoodLogPage`, `AnalyticsPage` | Dated meal history, range filters, daily/week/month charts and empty states | User-local date history, CSV/JSON date-filtered export, and 7/30/90-day nutrition and weight summaries implemented; browser unverified |
 | `profile_settings` | `/profile`, `/settings` | `ProfilePage`, `SettingsPage` | Profile, targets, preferences, units, exports, account/privacy controls | Profile goals, weight link, exports, sign-out and account deletion implemented; settings/preferences editing incomplete |
 | `app_launch_splash_animated_3` | application startup | `AppBootstrapScreen` | Brief accessible startup/loading transition, no motion when reduced | Not implemented; app loads directly |
@@ -35,6 +35,7 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 - Verify mobile, tablet, and desktop breakpoints. Keep bottom navigation clear of scanner controls, form actions, and dialogs; allow content to scroll behind fixed navigation with safe-area padding.
 - Provide loading, empty, success, and error states for every asynchronous view. No inert placeholder links or unreported unavailable integrations.
 - Keep all forms usable with keyboard and touch; honor reduced-motion settings.
+- Food nutrition status is shown per nutrient; absent values remain unavailable, source attribution is linked, and preparation variants/portion weights remain distinct.
 
 ## Cross-screen feature references
 

@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, U
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint
+from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
@@ -62,6 +62,8 @@ class Food(Base):
     source_record_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     nutrition_basis: Mapped[str] = mapped_column(String(40), default="per_100g")
+    nutrition_provenance: Mapped[dict] = mapped_column(JSON, default=dict)
+    data_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     kcal: Mapped[float | None] = mapped_column(Float, nullable=True)
     protein: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -378,15 +380,19 @@ def update_profile(data:ProfileIn,s:Session=Depends(db),u:User=Depends(current_u
         u.goals={**u.goals,**data.goals}
     s.commit();return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
 @app.get("/api/v1/foods")
-def foods(q:str="",s:Session=Depends(db),u:User=Depends(current_user)):
-    candidates=list(s.scalars(select(Food).where((Food.owner_id==None)|(Food.owner_id==u.id)).order_by(Food.name).limit(500)))
-    needle=q.strip().casefold()
-    if needle:candidates=[f for f in candidates if needle in f.name.casefold() or any(needle in a.casefold() for a in (f.aliases or []))]
-    return [food_payload(f,s) for f in candidates[:60]]
+def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=Depends(current_user)):
+    statement=select(Food).where(or_(Food.owner_id.is_(None),Food.owner_id==u.id))
+    needle=q.strip()
+    if needle:
+        escaped=needle.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")
+        pattern=f"%{escaped}%"
+        statement=statement.where(or_(Food.name.ilike(pattern,escape="\\"),cast(Food.aliases,Text).ilike(pattern,escape="\\")))
+    candidates=list(s.scalars(statement.order_by(Food.name).limit(60)))
+    return [food_payload(f,s) for f in candidates]
 
 def food_payload(f:Food,s:Session):
     servings=list(s.scalars(select(FoodServing).where(FoodServing.food_id==f.id).order_by(FoodServing.grams)))
-    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"is_custom":f.owner_id is not None,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
 
 @app.get("/api/v1/foods/{food_id}")
 def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
@@ -395,7 +401,8 @@ def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     return food_payload(f,s)
 @app.post("/api/v1/foods",status_code=201)
 def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
-    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
+    provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
+    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",nutrition_provenance=provenance,kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
     s.add(f);s.flush();s.add(FoodServing(food_id=f.id,label="100 g",grams=100,source="standard"))
     if data.serving_label and data.serving_grams:s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
@@ -403,7 +410,7 @@ def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
 def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not f:raise HTTPException(404,"Personal food not found")
-    f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None
+    f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None;f.data_notes=None;f.nutrition_provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
     if data.serving_label and data.serving_grams and not s.scalar(select(FoodServing.id).where(FoodServing.food_id==f.id,FoodServing.label==data.serving_label.strip())):
         s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
@@ -435,12 +442,12 @@ def normalize_meal_items(raw_items:list[MealItemIn],owner:User,s:Session,previou
             food=s.scalar(select(Food).where(Food.id==entry.food_id,((Food.owner_id==None)|(Food.owner_id==owner.id))))
             if not food:raise HTTPException(422,"A selected catalogue food is unavailable")
             name=food.name;state=food.state;per100={k:getattr(food,k) for k in ("kcal","protein","carbs","fat")}
-            provenance={"verification":food.verification,"source":food.source,"source_record_id":food.source_record_id,"source_url":food.source_url,"nutrition_basis":food.nutrition_basis}
+            provenance={"verification":food.verification,"source":food.source,"source_record_id":food.source_record_id,"source_url":food.source_url,"nutrition_basis":food.nutrition_basis,"nutrition_provenance":food.nutrition_provenance or {},"data_notes":food.data_notes}
         else:
             name=(entry.name or entry.food or "").strip()
             if not name:raise HTTPException(422,"Each meal item needs a name or catalogue food")
             state=entry.state or "unspecified";per100=entry.per100.model_dump()
-            provenance={"verification":"user_provided","source":"User provided meal entry","source_record_id":None,"source_url":None,"nutrition_basis":"per_100g"}
+            provenance={"verification":"user_provided","source":"User provided meal entry","source_record_id":None,"source_url":None,"nutrition_basis":"per_100g","nutrition_provenance":{key:{"status":"user_provided","source":"User provided meal entry"} for key,value in per100.items() if value is not None},"data_notes":None}
         result.append({"snapshot_id":str(uuid4()),"food_id":food.id if food else None,"name":name,"state":state,"brand":food.brand if food else None,"grams":entry.grams,"portion_label":entry.portion_label,"per100":per100,**provenance})
     return result
 

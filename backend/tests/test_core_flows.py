@@ -4,9 +4,10 @@ from zoneinfo import ZoneInfo
 import io
 from PIL import Image
 from fastapi.testclient import TestClient
-from backend.app.main import app
+from backend.app.main import app, Food, FoodServing
 import backend.app.main as main
 from backend.app.knowledge import cosine
+from backend.app.food_import import normalize_foundation_food
 
 def register(client):
     suffix=uuid4().hex
@@ -257,6 +258,39 @@ def test_embedding_adapter_validates_dimensions_and_sorts_provider_results(monke
     vectors,model=main.request_embeddings(['first','second'])
     assert model=='test-embedding-model' and vectors==[[1.0,0.0],[0.0,1.0]]
     assert cosine([1.0,0.0],[1.0,0.0])==1.0 and cosine([1.0],[0.0,1.0])==0.0
+
+def test_food_import_keeps_missing_nutrients_null_preserves_zero_and_explains_exclusions():
+    base={"fdcId":123,"description":"Chicken breast, raw","foodCategory":{"description":"Poultry"},"foodPortions":[{"amount":1,"measureUnit":{"name":"piece"},"gramWeight":120}],"foodNutrients":[
+        {"nutrient":{"id":1008,"name":"Energy"},"amount":0,"foodNutrientDerivation":{"code":"A","description":"Analytical","foodNutrientSource":{"description":"Analytical"}}},
+        {"nutrient":{"id":1003,"name":"Protein"},"amount":20,"foodNutrientDerivation":{"code":"NC","description":"Calculated","foodNutrientSource":{"description":"Calculated"}}},
+        {"nutrient":{"id":1005,"name":"Carbohydrate, by difference"},"amount":-0.2,"foodNutrientDerivation":{"code":"NC","description":"Calculated","foodNutrientSource":{"description":"Calculated"}}},
+    ]}
+    imported=normalize_foundation_food(base)
+    assert imported['state']=='raw' and imported['kcal']==0 and imported['fat'] is None
+    assert imported['nutrition_provenance']['kcal']['status']=='verified'
+    assert imported['nutrition_provenance']['protein']['status']=='reviewed'
+    assert imported['carbs'] is None and imported['nutrition_provenance']['carbs']['status']=='unavailable'
+    assert imported['data_notes'] and imported['servings']==[{"label":"1 piece","grams":120.0}]
+
+def test_catalogue_search_finds_late_matches_and_exposes_source_provenance():
+    source_id=f"test-{uuid4().hex}"
+    with main.SessionLocal() as db:
+        rows=[Food(owner_id=None,name=f"A catalogue filler {i:03d}",state="prepared",aliases=[],verification="reviewed",source="test",nutrition_basis="per_100g",nutrition_provenance={}) for i in range(75)]
+        target=Food(owner_id=None,name="Rarely listed cooked lentils",state="cooked",aliases=["lentils"],verification="reviewed",source="USDA FoodData Central FNDDS test",source_record_id=source_id,source_url="https://fdc.nal.usda.gov/food-details/123/nutrients",nutrition_basis="per_100g",nutrition_provenance={"kcal":{"status":"reviewed","source":"Survey"}},kcal=116,protein=9,carbs=20,fat=0.4)
+        db.add_all(rows+[target]);db.flush();db.add(FoodServing(food_id=target.id,label="1 cup",grams=198,source="USDA"));target_id=target.id;db.commit()
+    with TestClient(app) as client:
+        register(client)
+        results=client.get('/api/v1/foods?q=rarely%20listed').json()
+        assert len(results)==1 and results[0]['id']==target_id
+        detail=client.get(f"/api/v1/foods/{target_id}").json()
+        assert detail['source_record_id']==source_id and detail['source_url'].startswith('https://fdc.nal.usda.gov/')
+        assert detail['nutrition_provenance']['kcal']['status']=='reviewed'
+        assert detail['kcal']==116 and detail['servings'][0]['source']=='USDA'
+    with main.SessionLocal() as db:
+        db.query(FoodServing).filter(FoodServing.food_id==target_id).delete()
+        db.query(Food).filter(Food.id==target_id).delete()
+        db.query(Food).filter(Food.name.like('A catalogue filler %')).delete(synchronize_session=False)
+        db.commit()
 
 def test_forgot_password_response_does_not_reveal_account_existence():
     with TestClient(app) as client:
