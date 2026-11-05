@@ -108,7 +108,7 @@ def test_clear_all_conversations_only_clears_current_account():
         assert len(other.get('/api/v1/assistant/conversations').json())==1
 
 def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
-    captured={}
+    captured={"calls":0}
     class FakeResponse:
         def raise_for_status(self): pass
         def json(self): return {"choices":[{"message":{"content":"You logged 195 kcal today."}}]}
@@ -116,16 +116,22 @@ def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
         def __init__(self,timeout): pass
         def __enter__(self): return self
         def __exit__(self,*args): pass
-        def post(self,url,headers,json): captured['payload']=json;return FakeResponse()
+        def post(self,url,headers,json): captured['payload']=json;captured['calls']+=1;return FakeResponse()
     monkeypatch.setattr(main.httpx,'Client',FakeClient)
     monkeypatch.setenv('AI_BASE_URL','https://provider.invalid/v1');monkeypatch.setenv('AI_API_KEY','test-only-key');monkeypatch.setenv('AI_MODEL','test-model')
     with TestClient(app) as client:
         register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
         c=client.post('/api/v1/assistant/conversations',headers=headers).json()
         client.post('/api/v1/meals',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"name":"rice","grams":150,"per100":{"kcal":130,"protein":None,"carbs":None,"fat":None}}]})
-        answer=client.post('/api/v1/assistant',headers=headers,json={"conversation_id":c['id'],"message":"How much did I eat?"})
+        request={"conversation_id":c['id'],"message":"How much did I eat?","idempotency_key":uuid4().hex}
+        answer=client.post('/api/v1/assistant',headers=headers,json=request)
         assert answer.status_code==200 and answer.json()['message']=="You logged 195 kcal today."
         assert '195.0' in captured['payload']['messages'][0]['content']
+        replay=client.post('/api/v1/assistant',headers=headers,json=request)
+        assert replay.status_code==200 and replay.json()['already_processed'] is True
+        assert replay.json()['message']==answer.json()['message'] and captured['calls']==1
+        conflict=client.post('/api/v1/assistant',headers=headers,json={**request,"message":"A different prompt"})
+        assert conflict.status_code==409
         assert len(client.get(f"/api/v1/assistant/conversations/{c['id']}").json()['messages'])==2
 
 def test_onboarding_calculates_targets_and_persists_weight_history():
@@ -238,7 +244,7 @@ def test_assistant_includes_retrieved_evidence_and_persists_citations(monkeypatc
     with TestClient(app) as client:
         register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
         conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
-        response=client.post('/api/v1/assistant',headers=headers,json={"conversation_id":conversation['id'],"message":"What does serving size mean?"})
+        response=client.post('/api/v1/assistant',headers=headers,json={"conversation_id":conversation['id'],"message":"What does serving size mean?","idempotency_key":uuid4().hex})
         assert response.status_code==200 and response.json()['sources'][0]['ref']=='K1'
         assert 'Serving size on a nutrition label' in captured['messages'][0]['content']
         persisted=client.get(f"/api/v1/assistant/conversations/{conversation['id']}").json()['messages'][-1]

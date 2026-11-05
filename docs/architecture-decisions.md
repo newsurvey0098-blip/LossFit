@@ -6,6 +6,11 @@
 - Every access JWT refers to a revocable database session. Logout revokes that session; a password reset revokes every session for the account.
 - CSRF is enforced for refresh/logout when the ambient refresh cookie is present. Requests also need a configured origin and matching double-submit token.
 
+## Assistant retries
+
+- Each assistant turn uses a client-generated idempotency key scoped to its conversation. The backend serializes writes per conversation and stores prompt, final answer, and citations under a unique key. A retry returns that saved result without calling the provider or appending another message pair; reusing a key with different prompt text is rejected.
+- Provider failures do not persist partial turns. The browser retains the key while offering a retry for the same pending text.
+
 ## Nutrition and history
 
 - The API resolves catalogue food nutrition and portions before writing a meal. Scanner and assistant suggestions cannot set authoritative nutrients.

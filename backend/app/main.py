@@ -145,6 +145,16 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(String(8000))
     citations: Mapped[list|None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class AssistantTurn(Base):
+    __tablename__ = "assistant_turns"
+    __table_args__ = (UniqueConstraint("conversation_id", "idempotency_key", name="uq_assistant_turn_conversation_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("assistant_conversations.id", ondelete="CASCADE"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    prompt: Mapped[str] = mapped_column(String(4000))
+    answer: Mapped[str] = mapped_column(String(8000))
+    citations: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 class LessonProgress(Base):
     __tablename__ = "lesson_progress"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -198,7 +208,7 @@ class ScanConfirmItemIn(BaseModel): candidate_id:str|None=Field(default=None,max
 class ScanConfirmIn(BaseModel): name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*");meal_type:str=Field(pattern="^(breakfast|lunch|dinner|snack)$");items:list[ScanConfirmItemIn]=Field(max_length=50);removed_candidate_ids:list[str]=Field(default_factory=list,max_length=12)
 class DeleteAccountIn(BaseModel): password:str=Field(min_length=1,max_length=128); confirmation:str
 class ProfileIn(BaseModel): name:str|None=Field(default=None,min_length=1,max_length=100); goals:dict[str,float]|None=None
-class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000)
+class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000); idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
 class QuizSubmissionIn(BaseModel): answers:list[int]=Field(min_length=1,max_length=10)
 class OnboardingIn(BaseModel):
     age:int=Field(ge=18,le=100); sex:str=Field(pattern="^(female|male|other)$"); height_cm:float=Field(ge=120,le=230); weight_kg:float=Field(ge=35,le=300)
@@ -736,9 +746,19 @@ def complete_lesson(slug:str,data:QuizSubmissionIn,s:Session=Depends(db),u:User=
     return {"lesson_slug":slug,"score":score,"total":1,"correct":score==1,"explanation":lesson["quiz"]["explanation"],"completed_at":now}
 @app.post("/api/v1/assistant")
 def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depends(current_user)):
-    enforce_rate_limit(s,"assistant_user",str(u.id),15,60)
     c=s.scalar(select(Conversation).where(Conversation.id==data.conversation_id,Conversation.owner_id==u.id))
     if not c:raise HTTPException(404,"Conversation not found")
+    prior_turn=s.scalar(select(AssistantTurn).where(AssistantTurn.conversation_id==c.id,AssistantTurn.idempotency_key==data.idempotency_key))
+    if prior_turn:
+        if prior_turn.prompt!=data.message:raise HTTPException(409,"This retry key belongs to a different message")
+        return {"conversation_id":c.id,"message":prior_turn.answer,"sources":prior_turn.citations or [],"already_processed":True}
+    enforce_rate_limit(s,"assistant_user",str(u.id),15,60)
+    c=s.scalar(select(Conversation).where(Conversation.id==data.conversation_id,Conversation.owner_id==u.id).with_for_update())
+    if not c:raise HTTPException(404,"Conversation not found")
+    prior_turn=s.scalar(select(AssistantTurn).where(AssistantTurn.conversation_id==c.id,AssistantTurn.idempotency_key==data.idempotency_key))
+    if prior_turn:
+        if prior_turn.prompt!=data.message:raise HTTPException(409,"This retry key belongs to a different message")
+        return {"conversation_id":c.id,"message":prior_turn.answer,"sources":prior_turn.citations or [],"already_processed":True}
     base=os.getenv("AI_BASE_URL","").rstrip("/");key=os.getenv("AI_API_KEY","");model=os.getenv("AI_MODEL","")
     if not base or not key or not model:raise HTTPException(503,"AI assistant is not configured yet. Your message was not sent; try again later.")
     start=datetime.now(timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)
@@ -757,10 +777,11 @@ def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depe
         if not isinstance(answer,str) or not answer.strip():raise ValueError("Empty provider response")
     except Exception:raise HTTPException(503,"The AI provider is unavailable. Your message was not saved; please retry.")
     citations=[{"ref":item["ref"],**item["source"]} for item in knowledge]
-    s.add_all([ChatMessage(conversation_id=c.id,role="user",content=data.message),ChatMessage(conversation_id=c.id,role="assistant",content=answer[:8000],citations=citations)])
+    answer=answer[:8000]
+    s.add_all([ChatMessage(conversation_id=c.id,role="user",content=data.message),ChatMessage(conversation_id=c.id,role="assistant",content=answer,citations=citations),AssistantTurn(conversation_id=c.id,idempotency_key=data.idempotency_key,prompt=data.message,answer=answer,citations=citations)])
     if c.title=="New conversation":c.title=data.message[:110]
     c.updated_at=datetime.now(timezone.utc);s.commit()
-    return {"conversation_id":c.id,"message":answer,"sources":citations}
+    return {"conversation_id":c.id,"message":answer,"sources":citations,"already_processed":False}
 @app.post("/api/v1/water",status_code=201)
 def water(ml:int=Query(gt=0,le=2000),s:Session=Depends(db),u:User=Depends(current_user)):
     e=Water(owner_id=u.id,ml=ml);s.add(e);s.commit();return {"id":e.id,"ml":e.ml}
