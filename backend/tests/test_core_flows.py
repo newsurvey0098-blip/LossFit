@@ -151,6 +151,17 @@ def test_profile_goal_updates_are_persisted_per_user():
         assert response.json()['name']=='Updated Name'
         assert client.get('/api/v1/analytics/daily').json()['goals']['protein']==125
 
+def test_diet_allergy_units_and_timezone_preferences_are_validated_and_private():
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        saved=owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":["peanuts"," tree nuts ","PEANUTS"],"timezone":"America/Los_Angeles","units":"imperial"})
+        assert saved.status_code==200
+        assert saved.json()['preferences']=={"diet":"vegan","allergies":["peanuts","tree nuts"],"timezone":"America/Los_Angeles","units":"imperial"}
+        assert owner.get('/api/v1/auth/me').json()['preferences']==saved.json()['preferences']
+        assert owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":[],"timezone":"Not/A_Timezone","units":"metric"}).status_code==422
+        register(other)
+        assert other.get('/api/v1/auth/me').json()['preferences']=={}
+
 def test_unknown_macros_remain_unknown_in_meal_and_summary():
     with TestClient(app) as client:
         register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
@@ -206,10 +217,12 @@ def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
         register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
         c=client.post('/api/v1/assistant/conversations',headers=headers).json()
         client.post('/api/v1/meals',headers=headers,json={"name":"Lunch","meal_type":"lunch","items":[{"name":"rice","grams":150,"per100":{"kcal":130,"protein":None,"carbs":None,"fat":None}}]})
+        client.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegetarian","allergies":["peanuts"],"timezone":"UTC","units":"metric"})
         request={"conversation_id":c['id'],"message":"How much did I eat?","idempotency_key":uuid4().hex}
         answer=client.post('/api/v1/assistant',headers=headers,json=request)
         assert answer.status_code==200 and answer.json()['message']=="You logged 195 kcal today."
         assert '195.0' in captured['payload']['messages'][0]['content']
+        assert 'vegetarian' in captured['payload']['messages'][0]['content'] and 'peanuts' in captured['payload']['messages'][0]['content']
         replay=client.post('/api/v1/assistant',headers=headers,json=request)
         assert replay.status_code==200 and replay.json()['already_processed'] is True
         assert replay.json()['message']==answer.json()['message'] and captured['calls']==1
