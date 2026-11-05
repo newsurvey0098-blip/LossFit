@@ -1,7 +1,7 @@
 """LossFit API foundation with persisted accounts, foods and meal snapshots."""
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-import os, secrets, csv, io, json
+import os, secrets, csv, io, json, ssl
 import hashlib, hmac, smtplib
 from uuid import uuid4
 from email.message import EmailMessage
@@ -14,6 +14,7 @@ import httpx
 from cryptography.fernet import Fernet
 from PIL import Image, ImageOps, UnidentifiedImageError
 from argon2 import PasswordHasher
+from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -376,15 +377,18 @@ def send_password_reset_email(email:str,reset_url:str):
     message=EmailMessage();message["Subject"]="Reset your LossFit password";message["From"]=sender;message["To"]=email
     message.set_content("Use this one-time link to reset your LossFit password. It expires in 15 minutes. If you did not request this, ignore this message.\n\n"+reset_url)
     port=int(os.getenv("SMTP_PORT","465"));username=os.getenv("SMTP_USERNAME");password=os.getenv("SMTP_PASSWORD")
-    if port==465:
-        with smtplib.SMTP_SSL(host,port,timeout=10) as smtp:
+    security=os.getenv('SMTP_SECURITY','ssl' if port==465 else 'starttls')
+    context=ssl.create_default_context()
+    if security=='ssl':
+        with smtplib.SMTP_SSL(host,port,timeout=10,context=context) as smtp:
             if username:smtp.login(username,password or "")
             smtp.send_message(message)
-    else:
+    elif security=='starttls':
         with smtplib.SMTP(host,port,timeout=10) as smtp:
-            smtp.ehlo();smtp.starttls();smtp.ehlo()
+            smtp.ehlo();smtp.starttls(context=context);smtp.ehlo()
             if username:smtp.login(username,password or "")
             smtp.send_message(message)
+    else:raise RuntimeError('SMTP_SECURITY must be ssl or starttls')
 @app.get("/api/v1/health/live")
 def live(): return {"status":"ok","service":"lossfit"}
 @app.get("/api/v1/health/ready")
@@ -400,7 +404,9 @@ def register(data:RegisterIn,request:Request,response:Response,s:Session=Depends
 def login(data:LoginIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"login_ip",request_ip(request),15,900)
     user=s.scalar(select(User).where(User.email==data.email.lower()))
-    if not user or not hasher.verify(user.password_hash,data.password): raise HTTPException(401,"Email or password is incorrect")
+    try:verified=user is not None and hasher.verify(user.password_hash,data.password)
+    except VerificationError:verified=False
+    if not verified:raise HTTPException(401,"Email or password is incorrect")
     result=new_auth_session(user,s,response);s.commit();return result
 @app.post("/api/v1/auth/refresh")
 def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)):
@@ -436,8 +442,11 @@ def reset_password(data:ResetPasswordIn,request:Request,response:Response,s:Sess
     enforce_rate_limit(s,"reset_attempt_ip",request_ip(request),15,900)
     digest=hashlib.sha256(data.token.encode()).hexdigest();entry=s.scalar(select(PasswordReset).where(PasswordReset.token_hash==digest,PasswordReset.used_at.is_(None),PasswordReset.expires_at>datetime.now(timezone.utc)))
     if not entry:raise HTTPException(400,"This reset link is invalid or expired. Request a new one.")
-    user=s.get(User,entry.user_id)
+    user=s.scalar(select(User).where(User.id==entry.user_id).with_for_update())
     if not user:raise HTTPException(400,"This reset link is invalid or expired. Request a new one.")
+    # Serialize resets for this account, then recheck token eligibility after waiting.
+    entry=s.scalar(select(PasswordReset).where(PasswordReset.id==entry.id,PasswordReset.used_at.is_(None),PasswordReset.expires_at>datetime.now(timezone.utc)).with_for_update())
+    if not entry:raise HTTPException(400,"This reset link is invalid or expired. Request a new one.")
     user.password_hash=hasher.hash(data.password);entry.used_at=datetime.now(timezone.utc)
     s.execute(PasswordReset.__table__.update().where(PasswordReset.user_id==user.id,PasswordReset.id!=entry.id,PasswordReset.used_at.is_(None)).values(used_at=datetime.now(timezone.utc)))
     s.execute(update(AuthSession).where(AuthSession.user_id==user.id,AuthSession.revoked_at.is_(None)).values(revoked_at=datetime.now(timezone.utc)))

@@ -13,7 +13,7 @@ LossFit is a nutrition tracking application being built from the supplied screen
 
 The initial migration was applied to an empty local database. The current schema is an early foundation and is not production ready.
 
-Password reset is enabled only when `SMTP_HOST` and `SMTP_FROM` are set. Configure an SSL SMTP relay (`SMTP_PORT`, default 465), credentials where required, and `APP_BASE_URL` for the reset link. Without SMTP, the endpoint returns the same privacy-preserving response but cannot deliver a reset email.
+Password reset is enabled only when `SMTP_HOST` and `SMTP_FROM` are set. Configure an SMTP relay with `SMTP_SECURITY=ssl` (typically port 465) or `SMTP_SECURITY=starttls` (typically port 587), credentials where required, and `APP_BASE_URL` for the reset link. TLS certificates and hostnames are verified against the system trust store. Without SMTP, the endpoint returns the same privacy-preserving response but cannot deliver a reset email.
 
 Google account linking is optional. Set backend-only `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`; register that exact callback URI in Google Cloud Console. For local development, the callback is `http://127.0.0.1:3001/api/v1/auth/google/callback`. Without all three values, the connected-accounts screen clearly reports that Google linking is unavailable.
 

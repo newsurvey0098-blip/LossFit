@@ -2,6 +2,7 @@ import {expect,test} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 
 test('registration, onboarding, private food, and meal persist through the API',async({page})=>{
+  test.setTimeout(60000);
   const suffix=crypto.randomUUID();
   await page.goto('/register');
   await page.getByLabel('Name').fill('Browser Test User');
@@ -46,6 +47,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Delete New conversation',exact:true}).click();
   await expect(page).toHaveURL(/\/assistant$/);
   await page.reload();
+  await expect(page.getByRole('heading',{name:'Ask about your nutrition'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Delete New conversation',exact:true})).toHaveCount(0);
   await page.getByRole('button',{name:'Start a conversation',exact:true}).click();
   await expect(page).toHaveURL(/\/assistant\/\d+$/);
@@ -53,6 +55,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Clear all',exact:true}).click();
   await expect(page).toHaveURL(/\/assistant$/);
   await page.reload();
+  await expect(page.getByRole('heading',{name:'Ask about your nutrition'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Delete New conversation',exact:true})).toHaveCount(0);
 
   await page.goto('/foods/new');

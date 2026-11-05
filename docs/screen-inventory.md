@@ -6,7 +6,7 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 
 | Reference | Final route | Component | Required layout and interactions | Current implementation / verification |
 |---|---|---|---|---|
-| `authentication_forgot_password` | `/forgot-password` | `ForgotPasswordPage` | Centered credential form; generic submission status; return-to-login link; labels, validation, keyboard focus | Implemented; SMTP delivery unavailable unless configured; API tested, browser unverified |
+| `authentication_forgot_password` | `/forgot-password` | `ForgotPasswordPage` | Centered credential form; generic submission status; return-to-login link; labels, validation, keyboard focus | Implemented; local SMTP-over-TLS delivery and reset/session revocation API flow tested; browser recovery forms and axe checks passed using API mocks; public email relay delivery remains unverified |
 | `food_detail_animated` | `/foods/:foodId` | `FoodDetailPage` | Food image/detail, nutrition, serving controls, add-to-meal action; animation respects reduced motion | Shared with food detail; USDA catalogue provenance and nutrient availability are displayed; serving and meal logging integrated; browser unverified |
 | `authentication_log_in` | `/login` | `AuthPage` | Email/password form, error/success state, recovery and registration links | Implemented and API tested; browser unverified |
 | `food_detail` | `/foods/:foodId` | `FoodDetailPage` | Food detail with portion and meal assignment | 5,856 USDA Foundation/FNDDS records imported; search/detail API returns source IDs, links, per-nutrient statuses, availability notes, preparation state, and household portions; browser unverified |
