@@ -24,6 +24,7 @@ try {
   $env:AI_BASE_URL = "http://127.0.0.1:$visionPort/v1"
   $env:AI_API_KEY = 'local-e2e-vision-key'
   $env:VISION_MODEL = 'deterministic-local-test'
+  $env:AI_MODEL = 'deterministic-local-test'
   $env:CORS_ORIGINS = 'http://127.0.0.1:4173,http://localhost:4173'
   $env:LOSSFIT_API_PROXY = "http://127.0.0.1:$apiPort"
   $env:E2E_VISION_PORT = "$visionPort"

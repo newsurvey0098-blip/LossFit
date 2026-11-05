@@ -79,6 +79,7 @@ jobs:
       CORS_ORIGINS: http://127.0.0.1:4173
       AI_BASE_URL: http://127.0.0.1:3002/v1
       AI_API_KEY: local-e2e-vision-key
+      AI_MODEL: deterministic-local-test
       VISION_MODEL: deterministic-local-test
       E2E_VISION_PORT: "3002"
     steps:

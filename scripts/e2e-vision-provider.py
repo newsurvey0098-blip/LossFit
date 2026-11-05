@@ -23,10 +23,12 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length))
         content = body["messages"][0]["content"]
-        if not any(item.get("type") == "image_url" for item in content):
-            self.send_error(422)
-            return
-        payload = {"choices": [{"message": {"content": json.dumps({"items": [{"name": "Browser test oatmeal", "grams": 150}]})}}]}
+        has_image = isinstance(content, list) and any(item.get("type") == "image_url" for item in content if isinstance(item, dict))
+        if has_image:
+            answer = json.dumps({"items": [{"name": "Browser test oatmeal", "grams": 150}]})
+        else:
+            answer = "This is a deterministic test response based on your saved nutrition log."
+        payload = {"choices": [{"message": {"content": answer}}]}
         encoded = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
