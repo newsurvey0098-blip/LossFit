@@ -14,6 +14,15 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Current weight (lb)').fill('154.32');
   await page.getByRole('button',{name:'Continue'}).click();
   await expect(page.getByRole('heading',{name:'How you eat and move.'})).toBeVisible();
+  await page.getByLabel('Diet preference').selectOption('vegan');
+  await page.getByLabel('soy',{exact:true}).check();
+  await page.getByLabel('Timezone').fill('Asia/Kolkata');
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  await expect(page.getByLabel('Height (in)')).toHaveValue('70');
+  await page.getByRole('button',{name:'Continue'}).click();
+  await expect(page.getByLabel('Diet preference')).toHaveValue('vegan');
+  await expect(page.getByLabel('soy',{exact:true})).toBeChecked();
+  await expect(page.getByLabel('Timezone')).toHaveValue('Asia/Kolkata');
   await page.getByRole('button',{name:'Finish setup'}).click();
   await expect(page.getByRole('heading',{name:'Your profile is ready'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Good morning, Browser Test User.'})).toBeVisible({timeout:5000});
@@ -63,6 +72,8 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
 
   await page.goto('/profile');
+  await expect(page.getByLabel('Dietary preference')).toHaveValue('vegan');
+  await expect(page.getByLabel('Allergies or foods to avoid')).toHaveValue('soy');
   await expect(page.getByText(/70\.0 in · 220\.5 lb/)).toBeVisible();
   const jsonDownload=page.waitForEvent('download');
   await page.getByRole('button',{name:'Download JSON'}).click();

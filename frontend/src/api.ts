@@ -5,6 +5,21 @@ let refreshFlight:Promise<string|null>|null=null;
 export function setAccessToken(token:string|null){accessToken=token;}
 export function getAccessToken(){return accessToken;}
 
+export async function responseError(response:Response):Promise<Error>{
+ const body:unknown=await response.json().catch(()=>null);
+ const detail=body&&typeof body==='object'&&'detail' in body?body.detail:null;
+ if(typeof detail==='string'&&detail.trim())return new Error(detail);
+ if(Array.isArray(detail)){
+  const messages=detail.slice(0,5).flatMap(issue=>{
+   if(!issue||typeof issue!=='object'||typeof issue.msg!=='string')return [];
+   const field=Array.isArray(issue.loc)?issue.loc.filter((part:unknown)=>typeof part==='string'&&!['body','query','path'].includes(part)).join(' → '):'';
+   return [field?`${field}: ${issue.msg}`:issue.msg];
+  });
+  if(messages.length)return new Error(messages.join('; '));
+ }
+ return new Error(`Request failed (${response.status}). Please try again.`);
+}
+
 function csrfHeaders():Record<string,string>{
  const csrf=document.cookie.split('; ').find(value=>value.startsWith('lf_csrf='))?.slice(8);
  return csrf?{'X-CSRF-Token':decodeURIComponent(csrf)}:{};
@@ -40,12 +55,12 @@ export async function authenticatedFetch(path:string,init:RequestInit={}):Promis
 
 export async function api<T=any>(path:string,init:RequestInit={}):Promise<T>{
  const response=await authenticatedFetch(path,init);
- if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||`Request failed (${response.status})`)}
+ if(!response.ok)throw await responseError(response);
  return response.status===204?undefined as T:response.json();
 }
 
 export async function upload<T=any>(path:string,body:FormData):Promise<T>{
  const response=await authenticatedFetch(path,{method:'POST',body});
- if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||`Upload failed (${response.status})`)}
+ if(!response.ok)throw await responseError(response);
  return response.json();
 }

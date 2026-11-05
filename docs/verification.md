@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- API, upload, and export failures now format structured validation details as field messages, with a generic fallback for non-JSON or unexpected errors. Tests confirm rejected input and validation-context fields are omitted. Onboarding retains diet, allergies, timezone, and activity/goal choices when navigating back to body metrics. The live PostgreSQL browser flow confirmed vegan/soy preferences survive Back/Continue and appear on the saved profile. Ten frontend tests, both browser tests, and the production build passed.
+
 - Imperial units now control onboarding body inputs, profile measurements, weight entry/history, and analytics weight displays. The live PostgreSQL browser flow verified 70-inch onboarding, a 220.462262-lb entry stored as approximately 100 kg, and 220.5-lb displays after reload in weight history, analytics, and profile. Both browser tests and seven frontend component tests passed; the production build passed. Stored measurements remain canonical kg/cm.
 
 - Scanner review now queries the full catalogue and preserves selected matches across search changes. Scanner availability failures expose retry, analysis remains disabled until availability is confirmed, and invalid replacement files clear the prior photo. Seven frontend tests pass, including provider-check failure/retry and finding a food outside the initial results. These scanner component tests use deterministic API mocks; live vision remains unverified.
