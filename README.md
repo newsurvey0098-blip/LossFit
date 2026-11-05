@@ -4,12 +4,10 @@ LossFit is a nutrition tracking application being built from the supplied screen
 
 ## Local Windows setup
 
-1. Install Python 3.12 and PostgreSQL 18. Node 22.23.4 is project-local in `.runtime/` (the setup downloads it and verifies its published SHA256).
-2. Copy `.env.example` to `.env`, then set unique `JWT_SECRET` and stable `DELETION_LEDGER_SECRET` values. Do not rotate the deletion-ledger key while retained backups may need replay.
-3. Create the Python environment and install `backend/requirements.txt`.
-4. Run `scripts/start-db.ps1` to initialize/start the isolated project cluster on port 55432.
-5. Run `alembic -c backend/alembic.ini upgrade head` from the repository root.
-6. Run `scripts/start-dev.ps1`. Frontend is at `http://127.0.0.1:5173`; API at `http://127.0.0.1:3001/docs`.
+1. Install Python 3.12 and PostgreSQL 18.
+2. Run `powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1`. It creates `.venv`, installs pinned Python and npm dependencies, downloads Node 22.23.4 only if missing and verifies the checked-in SHA256, creates `.env` with unique local signing/deletion secrets if absent, starts the isolated project database on port 55432, and applies migrations. Keep the generated deletion-ledger key stable while retained backups may need replay.
+3. On first setup, add the shared food catalogue with `powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1 -ImportFoods`; the command is safe to rerun and imports the pinned USDA releases.
+4. Run `scripts/start-dev.ps1`. Frontend is at `http://127.0.0.1:5173`; API at `http://127.0.0.1:3001/docs`.
 
 The initial migration was applied to an empty local database. The current schema is an early foundation and is not production ready.
 
