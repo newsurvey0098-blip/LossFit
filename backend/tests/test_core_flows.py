@@ -103,6 +103,50 @@ def test_google_link_never_merges_accounts_by_matching_email(monkeypatch):
             linked=session.scalar(main.select(main.GoogleAccount).where(main.GoogleAccount.provider_subject=='separate-google-sub'))
             assert linked and linked.user_id==owner['id']
 
+def test_assistant_water_action_requires_preview_and_confirmation_and_is_idempotent():
+    with TestClient(app) as client:
+        register(client);headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
+        payload={"conversation_id":conversation['id'],"action":"log_water","water_ml":350,"idempotency_key":uuid4().hex}
+        preview=client.post('/api/v1/assistant/actions/preview',headers=headers,json=payload)
+        assert preview.status_code==201
+        action=preview.json();assert action['status']=='pending' and action['preview']['today_total_after_ml']==350
+        assert client.get('/api/v1/analytics/daily').json()['water_ml']==0
+        repeated=client.post('/api/v1/assistant/actions/preview',headers=headers,json=payload)
+        assert repeated.status_code==200 and repeated.json()['id']==action['id']
+        mismatch={**payload,"water_ml":500}
+        assert client.post('/api/v1/assistant/actions/preview',headers=headers,json=mismatch).status_code==409
+        confirmed=client.post(f"/api/v1/assistant/actions/{action['id']}/confirm",headers=headers)
+        assert confirmed.status_code==200 and confirmed.json()['status']=='confirmed'
+        assert confirmed.json()['result']['water_ml']==350
+        again=client.post(f"/api/v1/assistant/actions/{action['id']}/confirm",headers=headers)
+        assert again.json()['result']['water_entry_id']==confirmed.json()['result']['water_entry_id']
+        assert client.get('/api/v1/analytics/daily').json()['water_ml']==350
+
+def test_assistant_action_preview_is_private_cancelable_and_rechecked_before_write():
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);owner_headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        conversation=owner.post('/api/v1/assistant/conversations',headers=owner_headers).json()
+        base={"conversation_id":conversation['id'],"action":"log_water","water_ml":250}
+        canceled=owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json={**base,"idempotency_key":uuid4().hex}).json()
+        assert owner.post(f"/api/v1/assistant/actions/{canceled['id']}/cancel",headers=owner_headers).status_code==204
+        assert owner.post(f"/api/v1/assistant/actions/{canceled['id']}/confirm",headers=owner_headers).status_code==409
+        stale=owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json={**base,"idempotency_key":uuid4().hex}).json()
+        assert owner.post('/api/v1/water?ml=100',headers=owner_headers).status_code==201
+        response=owner.post(f"/api/v1/assistant/actions/{stale['id']}/confirm",headers=owner_headers)
+        assert response.status_code==409 and owner.get('/api/v1/analytics/daily').json()['water_ml']==100
+        expired=owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json={**base,"idempotency_key":uuid4().hex}).json()
+        with main.SessionLocal() as session:
+            pending=session.get(main.AssistantAction,expired['id']);pending.expires_at=datetime.now(timezone.utc)-timedelta(seconds=1);session.commit()
+        assert owner.post(f"/api/v1/assistant/actions/{expired['id']}/confirm",headers=owner_headers).status_code==410
+        assert owner.get('/api/v1/analytics/daily').json()['water_ml']==100
+        register(other);other_headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
+        assert other.post(f"/api/v1/assistant/actions/{stale['id']}/confirm",headers=other_headers).status_code==404
+        foreign={**base,"conversation_id":conversation['id'],"idempotency_key":uuid4().hex}
+        assert other.post('/api/v1/assistant/actions/preview',headers=other_headers,json=foreign).status_code==404
+        invalid=owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json={**base,"water_ml":49,"idempotency_key":uuid4().hex})
+        assert invalid.status_code==422
+
 def test_user_cannot_read_another_users_meal():
     with TestClient(app) as owner, TestClient(app) as other:
         register(owner)

@@ -18,6 +18,12 @@
 - Provider failures do not persist partial turns. The browser retains the key while offering a retry for the same pending text.
 - Daily assistant totals use the same profile-local calendar bounds as dashboard history. User-entered preference text is treated as untrusted data and cannot override assistant safety and evidence rules.
 
+## Assistant action confirmation
+
+- Assistant actions are registered server operations. The first operation, `log_water`, stores an owner-scoped preview bound to an owned conversation and an idempotency key. The preview includes the user's local date and current hydration total.
+- A preview does not write health data. Confirmation rechecks ownership, expiry, supported action, local date, and whether the hydration total changed. It then writes the water entry and confirmation audit in one transaction; repeated confirmation returns the saved result.
+- The UI asks the user to confirm the amount before it is recorded. Further action types and model-driven tool proposals require their own argument validation and confirmation tests before registration.
+
 ## Private file deletion
 
 - Scan-file paths are placed in an internal cleanup queue in the same transaction that removes the owning scan/account. Files are unlinked only after resolving under the configured private-upload root; failed or unsafe paths remain queued for operator review/retry.

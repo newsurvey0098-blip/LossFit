@@ -5,7 +5,7 @@ import os, secrets, csv, io, json
 import hashlib, hmac, smtplib
 from uuid import uuid4
 from email.message import EmailMessage
-from typing import Generator
+from typing import Generator, Literal
 from pathlib import Path
 import base64, difflib, re
 
@@ -195,6 +195,21 @@ class AssistantTurn(Base):
     answer: Mapped[str] = mapped_column(String(8000))
     citations: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+class AssistantAction(Base):
+    __tablename__ = "assistant_actions"
+    __table_args__ = (UniqueConstraint("owner_id", "idempotency_key", name="uq_assistant_action_owner_key"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("assistant_conversations.id", ondelete="CASCADE"), index=True)
+    action_type: Mapped[str] = mapped_column(String(40))
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    arguments: Mapped[dict] = mapped_column(JSON)
+    preview: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 class LessonProgress(Base):
     __tablename__ = "lesson_progress"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -256,6 +271,11 @@ class PreferencesIn(BaseModel):
     timezone:str=Field(min_length=1,max_length=64)
     units:str=Field(pattern="^(metric|imperial)$")
 class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000); idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
+class AssistantActionPreviewIn(BaseModel):
+    conversation_id:int
+    action:Literal["log_water"]
+    water_ml:int=Field(ge=50,le=2000)
+    idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
 class QuizSubmissionIn(BaseModel): answers:list[int]=Field(min_length=1,max_length=10)
 class OnboardingIn(BaseModel):
     age:int=Field(ge=18,le=100); sex:str=Field(pattern="^(female|male|other)$"); height_cm:float=Field(ge=120,le=230); weight_kg:float=Field(ge=35,le=300)
@@ -905,6 +925,61 @@ def delete_conversation(conversation_id:int,s:Session=Depends(db),u:User=Depends
     c=s.scalar(select(Conversation).where(Conversation.id==conversation_id,Conversation.owner_id==u.id))
     if not c:raise HTTPException(404,"Conversation not found")
     s.delete(c);s.commit()
+
+ASSISTANT_ACTIONS={"log_water":"Adds a user-confirmed water entry to the current local day."}
+def assistant_action_payload(action:AssistantAction):
+    return {"id":action.id,"action":action.action_type,"preview":action.preview,"status":action.status,"expires_at":action.expires_at,"result":action.result}
+
+@app.post("/api/v1/assistant/actions/preview",status_code=201)
+def preview_assistant_action(data:AssistantActionPreviewIn,response:Response,s:Session=Depends(db),u:User=Depends(current_user)):
+    enforce_rate_limit(s,"assistant_action_preview_user",str(u.id),20,3600)
+    s.execute(select(User.id).where(User.id==u.id).with_for_update()).scalar_one()
+    conversation=s.scalar(select(Conversation).where(Conversation.id==data.conversation_id,Conversation.owner_id==u.id).with_for_update())
+    if not conversation:raise HTTPException(404,"Conversation not found")
+    args={"water_ml":data.water_ml}
+    prior=s.scalar(select(AssistantAction).where(AssistantAction.owner_id==u.id,AssistantAction.idempotency_key==data.idempotency_key).with_for_update())
+    if prior:
+        if prior.action_type!=data.action or prior.conversation_id!=conversation.id or prior.arguments!=args:raise HTTPException(409,"This request key was already used for a different action")
+        response.status_code=200
+        return assistant_action_payload(prior)
+    tz=user_timezone(u);now=datetime.now(timezone.utc);local_now=now.astimezone(tz);local_start=local_now.replace(hour=0,minute=0,second=0,microsecond=0);start=local_start.astimezone(timezone.utc);end=(local_start+timedelta(days=1)).astimezone(timezone.utc)
+    current_ml=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
+    preview={"title":"Add water to today’s log","water_ml":data.water_ml,"today_total_before_ml":int(current_ml),"today_total_after_ml":int(current_ml)+data.water_ml,"local_date":local_now.date().isoformat()}
+    action=AssistantAction(id=uuid4().hex,owner_id=u.id,conversation_id=conversation.id,action_type=data.action,idempotency_key=data.idempotency_key,arguments=args,preview=preview,expires_at=now+timedelta(minutes=10))
+    s.add(action);s.commit();return assistant_action_payload(action)
+
+@app.post("/api/v1/assistant/actions/{action_id}/confirm")
+def confirm_assistant_action(action_id:str,s:Session=Depends(db),u:User=Depends(current_user)):
+    enforce_rate_limit(s,"assistant_action_confirm_user",str(u.id),30,3600)
+    if len(action_id)!=32:raise HTTPException(404,"Action preview not found")
+    s.execute(select(User.id).where(User.id==u.id).with_for_update()).scalar_one()
+    action=s.scalar(select(AssistantAction).where(AssistantAction.id==action_id,AssistantAction.owner_id==u.id).with_for_update())
+    if not action:raise HTTPException(404,"Action preview not found")
+    if action.status=="confirmed":return assistant_action_payload(action)
+    if action.status!="pending":raise HTTPException(409,"This action is no longer available")
+    now=datetime.now(timezone.utc)
+    if action.expires_at<=now:
+        action.status="expired";s.commit();raise HTTPException(410,"This action preview expired. Create a new preview.")
+    conversation=s.scalar(select(Conversation).where(Conversation.id==action.conversation_id,Conversation.owner_id==u.id))
+    if not conversation:raise HTTPException(404,"Conversation not found")
+    if action.action_type not in ASSISTANT_ACTIONS:raise HTTPException(409,"This action is no longer supported")
+    if action.action_type=="log_water":
+        tz=user_timezone(u);local_now=now.astimezone(tz);local_start=local_now.replace(hour=0,minute=0,second=0,microsecond=0);start=local_start.astimezone(timezone.utc);end=(local_start+timedelta(days=1)).astimezone(timezone.utc)
+        current_ml=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
+        if local_now.date().isoformat()!=action.preview["local_date"] or int(current_ml)!=int(action.preview["today_total_before_ml"]):
+            action.status="stale";s.commit();raise HTTPException(409,"Your hydration log changed after this preview. Review a fresh preview before confirming.")
+        entry=Water(owner_id=u.id,ml=int(action.arguments["water_ml"]),logged_at=now);s.add(entry);s.flush()
+        action.result={"water_entry_id":entry.id,"water_ml":entry.ml,"logged_at":entry.logged_at.isoformat()}
+    action.status="confirmed";action.confirmed_at=now;s.commit();return assistant_action_payload(action)
+
+@app.post("/api/v1/assistant/actions/{action_id}/cancel",status_code=204)
+def cancel_assistant_action(action_id:str,s:Session=Depends(db),u:User=Depends(current_user)):
+    if len(action_id)!=32:raise HTTPException(404,"Action preview not found")
+    action=s.scalar(select(AssistantAction).where(AssistantAction.id==action_id,AssistantAction.owner_id==u.id).with_for_update())
+    if not action:raise HTTPException(404,"Action preview not found")
+    if action.status=="confirmed":raise HTTPException(409,"A confirmed action cannot be cancelled")
+    if action.status=="pending":action.status="cancelled";s.commit()
+
 @app.get("/api/v1/learning")
 def learning_catalogue(s:Session=Depends(db),u:User=Depends(current_user)):
     progress={p.lesson_slug:p for p in s.scalars(select(LessonProgress).where(LessonProgress.owner_id==u.id))}
@@ -969,4 +1044,5 @@ def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depe
     return {"conversation_id":c.id,"message":answer,"sources":citations,"already_processed":False}
 @app.post("/api/v1/water",status_code=201)
 def water(ml:int=Query(gt=0,le=2000),s:Session=Depends(db),u:User=Depends(current_user)):
+    s.execute(select(User.id).where(User.id==u.id).with_for_update()).scalar_one()
     e=Water(owner_id=u.id,ml=ml);s.add(e);s.commit();return {"id":e.id,"ml":e.ml}
