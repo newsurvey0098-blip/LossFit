@@ -259,11 +259,36 @@ test('registration, onboarding, private food, and meal persist through the API',
 
   await page.getByLabel('Meal name').fill('Edited oatmeal breakfast');
   await page.getByLabel('Portion in grams').fill('200');
-  await page.getByRole('button',{name:'Save changes'}).click();
+  const addToExistingMeal=page.getByRole('button',{name:'Add food to this meal'});
+  await addToExistingMeal.focus();
+  await page.keyboard.press('Enter');
+  const editMealSearch=page.getByLabel('Search foods to add to this meal');
+  await expect(editMealSearch).toBeFocused();
+  await page.keyboard.type('Browser test oatmeal');
+  const editMealResult=page.locator('.food-picker-results').getByRole('button',{name:/Browser test oatmeal/});
+  await expect(editMealResult.first()).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(editMealResult.first()).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Serving')).toBeFocused();
+  await page.keyboard.press('Tab');
+  const editMealAmount=page.getByLabel('Amount in grams');
+  await expect(editMealAmount).toBeFocused();
+  await page.keyboard.press('Control+A');
+  await page.keyboard.type('100');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button',{name:'Add item'})).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(addToExistingMeal).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button',{name:'Save changes'})).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('status')).toContainText('Meal changes saved.');
   await page.reload();
   await expect(page.getByRole('heading',{name:'Edited oatmeal breakfast'})).toBeVisible();
-  await expect(page.getByLabel('Portion in grams')).toHaveValue('200');
+  await expect(page.getByLabel('Portion in grams')).toHaveCount(2);
+  await expect(page.getByLabel('Portion in grams').nth(0)).toHaveValue('200');
+  await expect(page.getByLabel('Portion in grams').nth(1)).toHaveValue('100');
 
   await page.goto('/log');
   await expect(page.getByText('Edited oatmeal breakfast')).toBeVisible();
@@ -423,7 +448,8 @@ test('registration, onboarding, private food, and meal persist through the API',
   expect(foodDetailMeal?.meal_type).toBe('lunch');
   expect(foodDetailMeal?.nutrition.kcal).toBe(225);
   expect(foodDetailMeal?.items[0].portion_label).toBe('1 bowl');
-  expect(exportedOatmeal?.nutrition.kcal).toBe(300);
+  expect(exportedOatmeal?.nutrition.kcal).toBe(450);
+  expect(exportedOatmeal?.items.map((item:{grams:number})=>item.grams)).toEqual([200,100]);
   expect(exportedBarcode?.items[0].source_record_id).toBe('3017624010701');
   expect(exportedBarcode?.nutrition.protein_g).toBeCloseTo(3.15);
   const csvDownload=page.waitForEvent('download');

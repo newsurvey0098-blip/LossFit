@@ -140,6 +140,11 @@ function localDateTime(value: string) {
 export default function MealDetailPage() {
   const { mealId } = useParams();
   const navigate = useNavigate();
+  const addFoodButton = React.useRef<HTMLButtonElement>(null);
+  const pickerSearchInput = React.useRef<HTMLInputElement>(null);
+  const pickerServingInput = React.useRef<HTMLSelectElement>(null);
+  const pickerAmountInput = React.useRef<HTMLInputElement>(null);
+  const pickerWasOpen = React.useRef(false);
   const [meal, setMeal] = React.useState<Meal | null>(null);
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -172,6 +177,17 @@ export default function MealDetailPage() {
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
   }, [picker, query]);
+
+  React.useEffect(() => {
+    if (picked) {
+      pickerWasOpen.current = true;
+      (pickerServingInput.current ?? pickerAmountInput.current)?.focus();
+    } else if (pickerWasOpen.current) {
+      pickerWasOpen.current = false;
+      if (picker) pickerSearchInput.current?.focus();
+      else addFoodButton.current?.focus();
+    }
+  }, [picked, picker]);
 
   function updateItem(index: number, patch: Partial<Item>) {
     setMeal((current) => current ? {
@@ -260,15 +276,15 @@ export default function MealDetailPage() {
         </div>
         <button className="button" aria-label={`Remove ${item.name || item.food || 'food'}`} onClick={() => removeItem(index)}>Remove</button>
       </article>)}
-      <button className="button" type="button" onClick={() => { setPicker((value) => !value); setPicked(null); setError(''); }}><Search size={16} /> Add food to this meal</button>
+      <button ref={addFoodButton} className="button" type="button" onClick={() => { setPicker((value) => !value); setPicked(null); setError(''); }}><Search size={16} /> Add food to this meal</button>
       {picker && <section className="food-picker" aria-label="Add food picker">
-        <label>Search foods<input autoFocus aria-label="Search foods to add to this meal" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your catalogue" /></label>
+        <label>Search foods<input ref={pickerSearchInput} autoFocus aria-label="Search foods to add to this meal" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your catalogue" /></label>
         {picked ? <>
           <p className="muted">Adding <b>{picked.name}</b></p>
-          {picked.servings.length > 0 && <label>Serving<select value={serving} onChange={(e) => { setServing(e.target.value); const value = picked.servings.find((item) => item.label === e.target.value); if (value) setGrams(value.grams); }}>
+          {picked.servings.length > 0 && <label>Serving<select ref={pickerServingInput} value={serving} onChange={(e) => { setServing(e.target.value); const value = picked.servings.find((item) => item.label === e.target.value); if (value) setGrams(value.grams); }}>
             {picked.servings.map((value) => <option key={value.id} value={value.label}>{value.label} ({value.grams} g)</option>)}<option>Custom grams</option>
           </select></label>}
-          <label>Amount in grams<input type="number" min="1" max="10000" value={grams} onChange={(e) => { setServing('Custom grams'); setGrams(Math.max(1, Number(e.target.value) || 1)); }} /></label>
+          <label>Amount in grams<input ref={pickerAmountInput} type="number" min="1" max="10000" value={grams} onChange={(e) => { setServing('Custom grams'); setGrams(Math.max(1, Number(e.target.value) || 1)); }} /></label>
           <div className="actions"><button type="button" className="button primary" onClick={addPicked}>Add item</button><button type="button" className="button" onClick={() => setPicked(null)}>Choose another</button></div>
         </> : searching ? <p className="muted" role="status">Searching foods…</p> : <div className="food-picker-results">
           {results.map((food) => <button type="button" className="card food-result" key={food.id} onClick={() => chooseFood(food)}><span>{food.name} <small>{food.state}</small></span><span>{food.kcal == null ? '— kcal' : `${food.kcal} kcal / 100 g`}</span></button>)}
