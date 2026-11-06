@@ -2,7 +2,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from backend.app.recommendations import ingredient_conflicts, recommendation_eligibility
+from backend.app.recommendations import ingredient_conflicts, normalize_diet, recommendation_eligibility
 from backend.app.main import Food
 from backend.tests.test_core_flows import register
 
@@ -21,6 +21,12 @@ def test_preference_screen_requires_known_ingredients_and_never_assumes_safe():
     allowed, reason = recommendation_eligibility(Food(name="Coconut rice with butter", category="meal", ingredients="coconut milk, rice, butter"), "no_restrictions", ["dairy"])
     assert allowed is False and "allergy" in reason
     assert recommendation_eligibility(Food(name="Vegan gummies", category="snack", ingredients="fruit juice, gelatin"), "vegan", [])[0] is False
+    assert recommendation_eligibility(Food(name="Coconut rice", category="meal", ingredients="coconut milk, rice"), "dairy-free", [])[0] is True
+    assert recommendation_eligibility(Food(name="Butter rice", category="meal", ingredients="rice, butter"), "dairy_free", [])[0] is False
+    assert recommendation_eligibility(Food(name="Tuna salad", category="meal", ingredients="tuna, lettuce"), "pescatarian", [])[0] is True
+    assert recommendation_eligibility(Food(name="Chicken salad", category="meal", ingredients="chicken, lettuce"), "pescatarian", [])[0] is False
+    assert recommendation_eligibility(Food(name="Anything", category="meal", ingredients="rice"), "keto", [])[0] is False
+    assert normalize_diet(" Dairy-Free ") == "dairy_free"
     allowed, reason = recommendation_eligibility(Food(name="Uncertified meal", category="meal", ingredients="rice"), "halal", [])
     assert allowed is False and "cannot be verified" in reason
 
@@ -46,6 +52,8 @@ def test_daily_recommendations_respect_user_ownership_and_preferences():
         assert private["id"] not in {item["food_id"] for item in result["items"]}
         assert "cannot confirm any food is safe" in result["caution"]
         assert result["items"][0]["source"] == "User provided"
+        owner.put("/api/v1/users/preferences", headers=headers, json={"diet": "keto", "allergies": [], "timezone": "UTC", "units": "metric"})
+        unsupported = owner.get("/api/v1/recommendations/daily").json()
+        assert unsupported["items"] == [] and "does not yet know how to apply" in unsupported["message"]
         invalid = owner.put("/api/v1/users/preferences", headers=headers, json={"diet": "vegan", "allergies": None, "timezone": "UTC", "units": "metric"})
-        if invalid.status_code == 200:
-            assert owner.get("/api/v1/recommendations/daily").status_code == 200
+        assert invalid.status_code == 422

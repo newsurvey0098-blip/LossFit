@@ -31,7 +31,7 @@ from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
 from .branded_catalog import normalize_branded_food, normalize_search_hit
-from .recommendations import recommendation_eligibility
+from .recommendations import SUPPORTED_DIETS, normalize_diet, recommendation_eligibility
 
 load_dotenv()
 validate_production_environment(os.environ)
@@ -1097,10 +1097,13 @@ def daily_recommendations(s:Session=Depends(db),u:User=Depends(current_user)):
     summary=daily_summary(s,u)
     preferences=u.preferences or {}
     diet=str(preferences.get("diet") or "no_restrictions")
+    diet_key=normalize_diet(diet)
     raw_allergies=preferences.get("allergies",[])
     allergies=[str(value) for value in raw_allergies if isinstance(value,str) and value.strip()] if isinstance(raw_allergies,list) else []
-    caution=("Suggestions are screened only against ingredient text saved in LossFit. This cannot detect cross-contact, omitted ingredients, or packaging changes; confirm the current label. LossFit cannot confirm any food is safe or provide medical advice." if allergies or diet.casefold() in {"vegan","vegetarian","halal"} else "Nutrition values are informational. Check portion sizes and current package labels; these ideas are not a medical plan.")
-    if diet.casefold()=="halal":
+    caution=("Suggestions are screened only against ingredient text saved in LossFit. This cannot detect cross-contact, omitted ingredients, or packaging changes; confirm the current label. LossFit cannot confirm any food is safe or provide medical advice." if allergies or diet_key in {"vegan","vegetarian","halal","dairy_free","gluten_free","pescatarian"} else "Nutrition values are informational. Check portion sizes and current package labels; these ideas are not a medical plan.")
+    if diet_key not in SUPPORTED_DIETS:
+        return {"date":summary["date"],"items":[],"message":f"LossFit does not yet know how to apply the custom diet preference '{diet}'. Suggestions are withheld; update your preference to a supported option or browse foods using your own criteria.","caution":caution}
+    if diet_key=="halal":
         return {"date":summary["date"],"items":[],"message":"LossFit cannot verify halal certification, so it will not make food-specific suggestions for this preference. Browse the catalogue and check trusted certification for each product.","caution":caution}
 
     goals=u.goals or {}
@@ -1139,8 +1142,8 @@ def daily_recommendations(s:Session=Depends(db),u:User=Depends(current_user)):
     candidates.sort(key=lambda item:(-item[0],item[1].name.casefold(),item[1].id))
     items=[{"food_id":food.id,"name":food.name,"reason":reason,"focus":focus or "balanced","serving_label":label,"serving_grams":grams,"kcal":food.kcal,"protein":food.protein,"carbs":food.carbs,"fat":food.fat,"verification":food.verification,"source":food.source,"source_url":food.source_url} for _,food,reason,grams,label in candidates[:3]]
     if items:
-        message="These options use foods in your catalogue and today's logged nutrition. Ingredient screening is cautious and cannot guarantee safety." if allergies or diet.casefold() in {"vegan","vegetarian"} else "These options use foods in your catalogue and today's logged nutrition."
-    elif allergies or diet.casefold() in {"vegan","vegetarian"}:
+        message="These options use foods in your catalogue and today's logged nutrition. Ingredient screening is cautious and cannot guarantee safety." if allergies or diet_key in {"vegan","vegetarian","dairy_free","gluten_free","pescatarian"} else "These options use foods in your catalogue and today's logged nutrition."
+    elif allergies or diet_key in {"vegan","vegetarian","dairy_free","gluten_free","pescatarian"}:
         message="No catalogue foods had enough recorded ingredient information to pass your preference screen. Add the full ingredient text from a current label, or choose foods using your own trusted checks."
     else:
         message="Add foods with nutrition values to your catalogue to see suggestions here."
