@@ -53,6 +53,31 @@ def test_model_meal_resolves_search_ids_and_server_nutrition(monkeypatch):
         meal=client.get('/api/v1/meals').json()[0]
         assert meal['kcal']==304 and len(meal['items'])==2
 
+def test_model_weight_proposal_waits_for_confirmation_and_updates_history_once(monkeypatch):
+    provider(monkeypatch,[tool('propose_weight',{'weight_kg':68.4})])
+    with TestClient(main.app) as client,TestClient(main.app) as other:
+        h,c=setup(client);oh,_=setup(other)
+        before=client.get('/api/v1/weight',headers=h).json()
+        profile_before=client.get('/api/v1/auth/me',headers=h).json()['profile'].get('weight_kg')
+        response=client.post('/api/v1/assistant',headers=h,json={'conversation_id':c,'message':'Log my weight as 68.4 kg','idempotency_key':uuid4().hex})
+        assert response.status_code==200
+        proposal=client.get(f'/api/v1/assistant/conversations/{c}',headers=h).json()['proposals'][0]
+        assert proposal['action']=='log_weight' and proposal['preview']['weight_kg']==68.4
+        assert client.get('/api/v1/weight',headers=h).json()==before
+        assert client.get('/api/v1/auth/me',headers=h).json()['profile'].get('weight_kg')==profile_before
+        assert other.post(f"/api/v1/assistant/actions/{proposal['id']}/confirm",headers=oh).status_code==404
+        for _ in range(2):assert client.post(f"/api/v1/assistant/actions/{proposal['id']}/confirm",headers=h).status_code==200
+        after=client.get('/api/v1/weight',headers=h).json()
+        assert len(after)==len(before)+1 and after[0]['weight_kg']==68.4
+        assert client.get('/api/v1/auth/me',headers=h).json()['profile']['weight_kg']==68.4
+
+def test_manual_weight_preview_requires_a_valid_exclusive_payload():
+    with TestClient(main.app) as client:
+        h,c=setup(client);base={'conversation_id':c,'action':'log_weight','idempotency_key':uuid4().hex}
+        assert client.post('/api/v1/assistant/actions/preview',headers=h,json=base).status_code==422
+        assert client.post('/api/v1/assistant/actions/preview',headers=h,json={**base,'weight_kg':-1}).status_code==422
+        assert client.post('/api/v1/assistant/actions/preview',headers=h,json={**base,'weight_kg':68,'water_ml':250}).status_code==422
+
 def test_invalid_tool_output_cannot_create_actions_or_chat_messages(monkeypatch):
     messages=[];provider(monkeypatch,messages)
     with TestClient(main.app) as client:

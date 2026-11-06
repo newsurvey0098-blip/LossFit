@@ -331,14 +331,18 @@ class PreferencesIn(BaseModel):
 class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000); idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
 class AssistantActionPreviewIn(BaseModel):
     conversation_id:int
-    action:Literal["log_water","log_meal"]
+    action:Literal["log_water","log_meal","log_weight"]
     water_ml:int|None=Field(default=None,ge=50,le=2000)
     meal:MealIn|None=None
+    weight_kg:float|None=Field(default=None,gt=20,le=350,allow_inf_nan=False)
     idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
     @model_validator(mode="after")
     def validate_arguments(self):
-        if self.action=="log_water" and (self.water_ml is None or self.meal is not None):raise ValueError("Water actions need an amount and cannot include a meal")
-        if self.action=="log_meal" and (self.meal is None or self.water_ml is not None or not self.meal.items):raise ValueError("Meal actions need at least one meal item and cannot include a water amount")
+        supplied=sum(value is not None for value in (self.water_ml,self.meal,self.weight_kg))
+        if supplied!=1:raise ValueError("Assistant actions must include exactly one matching payload")
+        if self.action=="log_water" and self.water_ml is None:raise ValueError("Water actions need an amount")
+        if self.action=="log_meal" and (self.meal is None or not self.meal.items):raise ValueError("Meal actions need at least one meal item")
+        if self.action=="log_weight" and self.weight_kg is None:raise ValueError("Weight actions need an amount in kilograms")
         if self.action=="log_meal" and self.meal and len(self.meal.items)>10:raise ValueError("Meal actions can include at most 10 items")
         if self.meal and self.meal.eaten_at and self.meal.eaten_at.tzinfo is None:raise ValueError("Meal time must include a timezone")
         return self
@@ -1391,7 +1395,7 @@ def delete_conversation(conversation_id:int,s:Session=Depends(db),u:User=Depends
     if not c:raise HTTPException(404,"Conversation not found")
     s.delete(c);s.commit()
 
-ASSISTANT_ACTIONS={"log_water":"Adds a user-confirmed water entry to the current local day.","log_meal":"Adds a user-confirmed meal using server-resolved catalogue nutrition."}
+ASSISTANT_ACTIONS={"log_water":"Adds a user-confirmed water entry to the current local day.","log_meal":"Adds a user-confirmed meal using server-resolved catalogue nutrition.","log_weight":"Adds a user-confirmed weight entry in kilograms."}
 def assistant_action_payload(action:AssistantAction):
     return {"id":action.id,"action":action.action_type,"preview":action.preview,"status":action.status,"expires_at":action.expires_at,"result":action.result}
 
@@ -1400,7 +1404,9 @@ def prepare_assistant_action(data:AssistantActionPreviewIn,response:Response,s:S
     s.execute(select(User.id).where(User.id==u.id).with_for_update()).scalar_one()
     conversation=s.scalar(select(Conversation).where(Conversation.id==data.conversation_id,Conversation.owner_id==u.id).with_for_update())
     if not conversation:raise HTTPException(404,"Conversation not found")
-    args={"water_ml":data.water_ml} if data.action=="log_water" else {"meal":data.meal.model_dump(mode="json")}
+    if data.action=="log_water":args={"water_ml":data.water_ml}
+    elif data.action=="log_meal":args={"meal":data.meal.model_dump(mode="json")}
+    else:args={"weight_kg":data.weight_kg}
     prior=s.scalar(select(AssistantAction).where(AssistantAction.owner_id==u.id,AssistantAction.idempotency_key==data.idempotency_key).with_for_update())
     if prior:
         if prior.action_type!=data.action or prior.conversation_id!=conversation.id or prior.arguments!=args:raise HTTPException(409,"This request key was already used for a different action")
@@ -1411,10 +1417,13 @@ def prepare_assistant_action(data:AssistantActionPreviewIn,response:Response,s:S
         tz=user_timezone(u);local_now=now.astimezone(tz);local_start=local_now.replace(hour=0,minute=0,second=0,microsecond=0);start=local_start.astimezone(timezone.utc);end=(local_start+timedelta(days=1)).astimezone(timezone.utc)
         current_ml=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
         preview={"title":"Add water to today’s log","water_ml":data.water_ml,"today_total_before_ml":int(current_ml),"today_total_after_ml":int(current_ml)+data.water_ml,"local_date":local_now.date().isoformat()}
-    else:
+    elif data.action=="log_meal":
         meal=data.meal
         items=normalize_meal_items(meal.items,u,s);totals=calculate_meal_totals(items)
         preview={"title":meal.name.strip(),"name":meal.name.strip(),"meal_type":meal.meal_type,"eaten_at":(meal.eaten_at or now).isoformat(),"items":items,"totals":totals}
+    else:
+        latest=s.scalar(select(WeightRecord).where(WeightRecord.owner_id==u.id).order_by(WeightRecord.recorded_at.desc(),WeightRecord.id.desc()).limit(1))
+        preview={"title":"Log weight","weight_kg":data.weight_kg,"previous_weight_kg":latest.weight_kg if latest else None,"previous_recorded_at":latest.recorded_at.isoformat() if latest else None,"recorded_at":now.isoformat(),"unit":"kg"}
     action=AssistantAction(id=uuid4().hex,owner_id=u.id,conversation_id=conversation.id,action_type=data.action,idempotency_key=data.idempotency_key,arguments=args,preview=preview,expires_at=now+timedelta(minutes=10))
     s.add(action);s.flush();
     if commit:s.commit()
@@ -1454,6 +1463,14 @@ def confirm_assistant_action(action_id:str,s:Session=Depends(db),u:User=Depends(
                 action.status="stale";s.commit();raise HTTPException(409,"A selected food is no longer available to this account. Build a new preview.")
         meal=Meal(owner_id=u.id,name=action.preview["name"],meal_type=action.preview["meal_type"],eaten_at=datetime.fromisoformat(action.preview["eaten_at"]),items=items,**action.preview["totals"])
         s.add(meal);s.flush();action.result={"meal_id":meal.id,"name":meal.name,"meal_type":meal.meal_type,"eaten_at":meal.eaten_at.isoformat(),"kcal":meal.kcal,"protein":meal.protein,"carbs":meal.carbs,"fat":meal.fat}
+    elif action.action_type=="log_weight":
+        latest=s.scalar(select(WeightRecord).where(WeightRecord.owner_id==u.id).order_by(WeightRecord.recorded_at.desc(),WeightRecord.id.desc()).limit(1))
+        latest_at=latest.recorded_at.isoformat() if latest else None
+        if latest_at!=action.preview["previous_recorded_at"] or (latest.weight_kg if latest else None)!=action.preview["previous_weight_kg"]:
+            action.status="stale";s.commit();raise HTTPException(409,"Your weight history changed after this preview. Review a fresh preview before confirming.")
+        entry=WeightRecord(owner_id=u.id,weight_kg=float(action.arguments["weight_kg"]),recorded_at=datetime.fromisoformat(action.preview["recorded_at"]));s.add(entry);s.flush()
+        u.profile={**u.profile,"weight_kg":entry.weight_kg}
+        action.result={"weight_id":entry.id,"weight_kg":entry.weight_kg,"recorded_at":entry.recorded_at.isoformat()}
     action.status="confirmed";action.confirmed_at=now;s.commit();return assistant_action_payload(action)
 
 @app.post("/api/v1/assistant/actions/{action_id}/cancel",status_code=204)

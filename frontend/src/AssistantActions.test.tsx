@@ -13,6 +13,26 @@ beforeEach(()=>{setAccessToken('frontend-test-token');fetchMock=vi.fn();vi.stubG
 afterEach(()=>{cleanup();setAccessToken(null);vi.unstubAllGlobals()});
 
 describe('assistant action confirmation',()=>{
+ it('previews a weight without writing and saves it only after confirmation',async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   const path=String(input);
+   if(path.endsWith('/assistant/actions/preview'))return jsonResponse({id:'weight-action-123456789012345678',action:'log_weight',status:'pending',preview:{weight_kg:68.4,previous_weight_kg:70,previous_recorded_at:'2026-11-05T12:00:00+00:00',recorded_at:'2026-11-06T12:00:00+00:00',unit:'kg'},result:null});
+   if(path.endsWith('/assistant/actions/weight-action-123456789012345678/confirm'))return jsonResponse({id:'weight-action-123456789012345678',action:'log_weight',status:'confirmed',preview:{weight_kg:68.4},result:{weight_id:51,weight_kg:68.4}});
+   throw new Error(`Unexpected fetch ${path}`);
+  });
+  const user=userEvent.setup();render(<AssistantActionPanel conversationId={9}/>);
+  await user.click(screen.getByRole('button',{name:'Log weight'}));
+  fireEvent.change(screen.getByLabelText('Weight'),{target:{value:'68.4'}});
+  await user.click(screen.getByRole('button',{name:'Preview'}));
+  expect(await screen.findByText(/Latest entry: 70 kg/)).toBeTruthy();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const request=JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+  expect(request).toMatchObject({action:'log_weight',weight_kg:68.4});
+  await user.click(screen.getByRole('button',{name:'Confirm log'}));
+  expect((await screen.findByRole('status')).textContent).toContain('Logged 68.4 kg. Your weight history and profile were updated.');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+ });
+
  it('previews water without writing, then confirms once',async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
    const path=String(input);

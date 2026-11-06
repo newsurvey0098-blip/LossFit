@@ -2733,7 +2733,8 @@
             "type": "string",
             "enum": [
               "log_water",
-              "log_meal"
+              "log_meal",
+              "log_weight"
             ],
             "title": "Action"
           },
@@ -2759,6 +2760,19 @@
                 "type": "null"
               }
             ]
+          },
+          "weight_kg": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 350.0,
+                "exclusiveMinimum": 20.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Kg"
           },
           "idempotency_key": {
             "type": "string",

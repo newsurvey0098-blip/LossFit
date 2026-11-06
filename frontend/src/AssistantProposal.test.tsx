@@ -24,3 +24,13 @@ it('disables expired proposals and permits cancelling a pending proposal',async(
  await screen.findByText('Proposal canceled.');
  expect(api).toHaveBeenCalledWith(`/assistant/actions/${water.id}/cancel`,{method:'POST'});
 });
+it('shows a weight proposal and requires an explicit confirmation',async()=>{
+ const weight:Proposal={id:'b'.repeat(32),action:'log_weight',status:'pending',expires_at:new Date(Date.now()+600000).toISOString(),preview:{weight_kg:68.4,previous_weight_kg:70,recorded_at:'2026-11-06T12:00:00+00:00'},result:null};
+ vi.mocked(api).mockResolvedValue({...weight,status:'confirmed',result:{weight_kg:68.4}});
+ render(<AssistantProposal proposal={weight}/>);
+ expect(screen.getByText('Proposed weight: 68.4 kg')).toBeTruthy();
+ expect(api).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Confirm proposed entry'}));
+ await screen.findByText('Entry confirmed and saved.');
+ expect(api).toHaveBeenCalledWith(`/assistant/actions/${weight.id}/confirm`,{method:'POST'});
+});

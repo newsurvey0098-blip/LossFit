@@ -6,7 +6,7 @@ export interface components {
     "AnalyticsRangeOut": { "days": number; "start_date": string; "end_date": string; "daily": Array<components["schemas"]["AnalyticsDayOut"]>; "weights": Array<components["schemas"]["AnalyticsWeightOut"]>; [key: string]: unknown; };
     "AnalyticsWeightOut": { "weight_kg": number; "recorded_at": string; [key: string]: unknown; };
     "AssistantActionOut": { "id": string; "action": string; "preview": { [key: string]: unknown; }; "status": string; "expires_at": string; "result"?: ({ [key: string]: unknown; }) | (null); [key: string]: unknown; };
-    "AssistantActionPreviewIn": { "conversation_id": number; "action": "log_water" | "log_meal"; "water_ml"?: (number) | (null); "meal"?: (components["schemas"]["MealIn"]) | (null); "idempotency_key": string; };
+    "AssistantActionPreviewIn": { "conversation_id": number; "action": "log_water" | "log_meal" | "log_weight"; "water_ml"?: (number) | (null); "meal"?: (components["schemas"]["MealIn"]) | (null); "weight_kg"?: (number) | (null); "idempotency_key": string; };
     "AssistantHistoryOut": { "id": number; "title": string; "proposals": Array<components["schemas"]["AssistantActionOut"]>; "messages": Array<components["schemas"]["AssistantMessageOut"]>; [key: string]: unknown; };
     "AssistantMessageOut": { "id"?: (number) | (null); "role": "user" | "assistant"; "content": string; "citations"?: Array<{ [key: string]: unknown; }>; "created_at"?: (string) | (null); [key: string]: unknown; };
     "AssistantReplyOut": { "conversation_id": number; "message": string; "sources": Array<components["schemas"]["CitationOut"]>; "already_processed": boolean; [key: string]: unknown; };
