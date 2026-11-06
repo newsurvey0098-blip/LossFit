@@ -33,6 +33,31 @@ describe('food detail meal logging',()=>{
   expect(await screen.findByRole('status')).toBeTruthy();
   expect(screen.getByText('Added to your meal log.')).toBeTruthy();
  });
+
+ it('announces a failed write and allows retry',async()=>{
+  const food={id:42,name:'Oat bowl',state:'cooked',verification:'user_provided',kcal:150,protein:5,carbs:27,fat:3,servings:[]};
+  let mealWrites=0;
+  vi.mocked(api).mockImplementation((path:string,init?:RequestInit)=>{
+   if(path==='/foods/42')return Promise.resolve(food) as never;
+   if(path==='/foods/42/recent')return Promise.resolve({}) as never;
+   if(path==='/meals'&&init?.method==='POST'){
+    mealWrites++;
+    return mealWrites===1?Promise.reject(new Error('Meal save failed')) as never:Promise.resolve({id:100}) as never;
+   }
+   return Promise.resolve([]) as never;
+  });
+  window.history.pushState(null,'','/foods/42');
+  const user=userEvent.setup();
+  render(<MemoryRouter initialEntries={['/foods/42']}><Routes><Route path="/foods/:foodId" element={<FoodDetailPage/>}/></Routes></MemoryRouter>);
+  await user.click(await screen.findByRole('button',{name:'Add to meal'}));
+  const alert=await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Meal save failed');
+  const retry=screen.getByRole('button',{name:'Add to meal'});
+  expect((retry as HTMLButtonElement).disabled).toBe(false);
+  await user.click(retry);
+  expect(await screen.findByText('Added to your meal log.')).toBeTruthy();
+  expect(mealWrites).toBe(2);
+ });
 });
 
 describe('USDA branded catalogue search',()=>{
