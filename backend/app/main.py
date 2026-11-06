@@ -25,13 +25,15 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
 from .monitoring import RequestMonitoring
-from .production import validate_production_environment
+from .production import configured_app_base_url, configured_cors_origins, is_production_environment, is_secure_cookie_environment, validate_production_environment
 from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
 
 load_dotenv()
 validate_production_environment(os.environ)
+APP_BASE_URL = configured_app_base_url(os.environ)
+APP_CORS_ORIGINS = configured_cors_origins(os.environ)
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit")
 JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deploying")
 engine = create_engine(DB_URL, pool_pre_ping=True)
@@ -453,19 +455,19 @@ def verify_google_id_token(raw_token:str, audience:str)->dict:
     return id_token.verify_oauth2_token(raw_token, GoogleRequest(), audience)
 
 app=FastAPI(title="LossFit API",version="0.1.0")
-if os.getenv("ENVIRONMENT")=="production" and (len(JWT_SECRET)<32 or JWT_SECRET=="local-only-change-this-secret-before-deploying"):
+if is_production_environment(os.environ) and (len(JWT_SECRET)<32 or JWT_SECRET=="local-only-change-this-secret-before-deploying"):
     raise RuntimeError("Production requires a unique JWT_SECRET of at least 32 characters")
-if os.getenv("ENVIRONMENT")=="production" and len(os.getenv("DELETION_LEDGER_SECRET",""))<32:
+if is_production_environment(os.environ) and len(os.getenv("DELETION_LEDGER_SECRET",""))<32:
     raise RuntimeError("Production requires a stable DELETION_LEDGER_SECRET of at least 32 characters")
-if os.getenv("ENVIRONMENT")=="production" and google_oauth_configured() and not os.environ["GOOGLE_REDIRECT_URI"].lower().startswith("https://"):
+if is_production_environment(os.environ) and google_oauth_configured() and not os.environ["GOOGLE_REDIRECT_URI"].lower().startswith("https://"):
     raise RuntimeError("Production Google OAuth requires an HTTPS redirect URI")
-app.add_middleware(CORSMiddleware,allow_origins=os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(","),allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Authorization","Content-Type","X-CSRF-Token"])
+app.add_middleware(CORSMiddleware,allow_origins=APP_CORS_ORIGINS,allow_credentials=True,allow_methods=["GET","POST","PUT","PATCH","DELETE"],allow_headers=["Authorization","Content-Type","X-CSRF-Token"])
 app.add_middleware(RequestMonitoring)
 @app.middleware("http")
 async def csrf_protection(request:Request,call_next):
     if request.method in {"POST","PUT","PATCH","DELETE"} and request.url.path not in {"/api/v1/auth/login","/api/v1/auth/register"}:
         cookie=request.cookies.get("lf_csrf")
-        if request.cookies.get("lf_refresh") and (not cookie or request.headers.get("x-csrf-token")!=cookie or request.headers.get("origin") not in os.getenv("CORS_ORIGINS","http://localhost:5173,http://127.0.0.1:5173").split(",")):
+        if request.cookies.get("lf_refresh") and (not cookie or request.headers.get("x-csrf-token")!=cookie or request.headers.get("origin") not in APP_CORS_ORIGINS):
             return Response(status_code=403,content="CSRF validation failed")
     return await call_next(request)
 def db() -> Generator[Session,None,None]:
@@ -484,7 +486,7 @@ def current_user(request: Request, s: Session=Depends(db)) -> User:
 def token(user,session_id:int): return jwt.encode({"sub":str(user.id),"sid":session_id,"jti":secrets.token_urlsafe(12),"exp":datetime.now(timezone.utc)+timedelta(minutes=20)},JWT_SECRET,algorithm="HS256")
 def token_hash(raw:str)->str:return hashlib.sha256(raw.encode()).hexdigest()
 def set_auth_cookies(response:Response,refresh:str):
-    secure=os.getenv("ENVIRONMENT")=="production";ttl=30*24*60*60
+    secure=is_secure_cookie_environment(os.environ);ttl=30*24*60*60
     response.set_cookie("lf_refresh",refresh,httponly=True,samesite="lax",secure=secure,max_age=ttl,path="/api/v1/auth")
     response.set_cookie("lf_csrf",secrets.token_urlsafe(24),httponly=False,samesite="lax",secure=secure,max_age=ttl,path="/")
 def new_auth_session(user:User,s:Session,response:Response):
@@ -563,7 +565,7 @@ def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db))
     recent=s.scalar(select(func.count(PasswordReset.id)).where(PasswordReset.user_id==user.id,PasswordReset.created_at>=now-timedelta(minutes=15))) or 0
     if recent>=3:return generic
     raw=secrets.token_urlsafe(36);entry=PasswordReset(user_id=user.id,token_hash=hashlib.sha256(raw.encode()).hexdigest(),expires_at=now+timedelta(minutes=15));s.add(entry);s.commit()
-    reset_url=os.getenv("APP_BASE_URL","http://127.0.0.1:5173").rstrip("/")+"/reset-password?token="+raw
+    reset_url=APP_BASE_URL.rstrip("/")+"/reset-password?token="+raw
     try:send_password_reset_email(user.email,reset_url)
     except Exception:
         s.delete(entry);s.commit()
@@ -614,7 +616,7 @@ def google_link_start(data:GoogleLinkIn,s:Session=Depends(db),u:User=Depends(cur
     return {"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(params)}
 @app.get("/api/v1/auth/google/callback",status_code=303,response_class=RedirectResponse,responses={303:{"description":"Redirect to connected-account status"}})
 def google_link_callback(code:str|None=Query(default=None,max_length=2048),state:str|None=Query(default=None,min_length=32,max_length=128),error:str|None=Query(default=None,max_length=128),s:Session=Depends(db)):
-    front=os.getenv("APP_BASE_URL","http://127.0.0.1:5173").rstrip("/")+"/settings/accounts"
+    front=APP_BASE_URL.rstrip("/")+"/settings/accounts"
     def finish(result:str):
         return RedirectResponse(front+"?google="+result,status_code=303)
     if not state:return finish("invalid")
