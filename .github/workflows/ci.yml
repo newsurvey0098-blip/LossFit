@@ -103,7 +103,9 @@ jobs:
       - run: for i in {1..60}; do curl --fail --silent http://127.0.0.1:3001/api/v1/health/ready && exit 0; sleep 1; done; cat /tmp/lossfit-api.log; exit 1
       - run: npm ci
         working-directory: frontend
-      - run: npx playwright install --with-deps chromium
+      # GitHub-hosted Ubuntu runners include Playwright's OS libraries; install
+      # only the pinned browser so CI doesn't spend time running apt upgrades.
+      - run: npx playwright install chromium
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
