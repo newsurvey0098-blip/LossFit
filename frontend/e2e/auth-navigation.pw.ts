@@ -44,9 +44,9 @@ test('signed-out users can sign in to the requested private page at mobile and d
     await save.scrollIntoViewIfNeeded();
     expect(await save.evaluate(button=>{const box=button.getBoundingClientRect();const target=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return target===button||button.contains(target)})).toBe(true);
     await page.route('**/api/v1/scan/status',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({available:false})}));
-    await page.goBack();
+    await page.getByRole('link',{name:'Foods',exact:true}).click();
     await page.getByRole('link',{name:'Scan a meal',exact:true}).click();
-    await expect(page.getByRole('status')).toContainText('not configured');
+    await expect(page.getByText(/Image analysis is not configured/i)).toBeVisible();
     expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
 });
