@@ -56,3 +56,30 @@ it('retains the idempotency key when stopping a reply and retrying',async()=>{
  await waitFor(()=>expect(keys).toHaveLength(2));
  expect(keys[1]).toBe(keys[0]);
 });
+
+it('keeps the unsent message and retries with the same key after a provider outage',async()=>{
+ const keys:string[]=[];let sends=0;
+ vi.mocked(api).mockImplementation(async(path,init)=>{
+  if(path==='/assistant/conversations')return list;
+  if(path==='/assistant/conversations/1')return history(sends>1?'Recovered after provider outage':'Existing history');
+  if(path==='/auth/me')return {preferences:{units:'metric'}};
+  if(path==='/assistant'){
+   keys.push(JSON.parse(String(init?.body)).idempotency_key);
+   sends++;
+   if(sends===1)throw new Error('The AI provider is unavailable or returned an invalid response. Your message was not saved; please retry.');
+   return {message:'Recovered reply'};
+  }
+  return undefined;
+ });
+ mount();await screen.findByText('Existing history');
+ const composer=screen.getByRole('textbox');
+ fireEvent.change(composer,{target:{value:'Can you explain my lunch?'}});
+ fireEvent.click(screen.getByRole('button',{name:'Send message'}));
+ expect((await screen.findByRole('alert')).textContent).toContain('Your message was not saved');
+ expect((composer as HTMLTextAreaElement).value).toBe('Can you explain my lunch?');
+ fireEvent.click(screen.getByRole('button',{name:'Retry'}));
+ await screen.findByText('Recovered after provider outage');
+ expect(keys).toHaveLength(2);
+ expect(keys[1]).toBe(keys[0]);
+ expect((composer as HTMLTextAreaElement).value).toBe('');
+});
