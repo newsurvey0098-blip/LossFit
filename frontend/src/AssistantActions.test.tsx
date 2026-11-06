@@ -64,4 +64,20 @@ describe('assistant action confirmation',()=>{
   expect(request.action).toBe('log_meal');
   expect(request.meal.items).toEqual([{food_id:84,grams:150},{food_id:85,grams:50}]);
  });
+
+ it('focuses each added food and prevents adding more than ten',async()=>{
+  const user=userEvent.setup();render(<AssistantActionPanel conversationId={14}/>);
+  await user.click(screen.getByRole('button',{name:'Log a meal'}));
+  const addButton=screen.getByRole('button',{name:'Add another food'});
+  await user.click(addButton);
+  const secondSearch=screen.getByLabelText('Search food 2 in your catalogue');
+  expect(document.activeElement).toBe(secondSearch);
+  for(let index=2;index<10;index++)await user.click(screen.getByRole('button',{name:'Add another food'}));
+  expect(screen.getAllByRole('group',{name:/^Food \d+$/})).toHaveLength(10);
+  const cappedButton=screen.getByRole('button',{name:'Add another food (10 maximum)'});
+  expect((cappedButton as HTMLButtonElement).disabled).toBe(true);
+  await user.click(screen.getByRole('button',{name:'Remove food 10'}));
+  expect(screen.getAllByRole('group',{name:/^Food \d+$/})).toHaveLength(9);
+  expect((screen.getByRole('button',{name:'Add another food'}) as HTMLButtonElement).disabled).toBe(false);
+ });
 });

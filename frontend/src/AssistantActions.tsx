@@ -28,18 +28,30 @@ function AssistantFoodPicker({
   onChange,
   onRemove,
   removable,
+  focusNewRow,
+  onFocused,
 }: {
   index: number;
   item: DraftMealItem;
   onChange: (value: DraftMealItem) => void;
   onRemove: () => void;
   removable: boolean;
+  focusNewRow: boolean;
+  onFocused: () => void;
 }) {
   const [query, setQuery] = React.useState('');
   const [foods, setFoods] = React.useState<FoodOption[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const searchInput = React.useRef<HTMLInputElement>(null);
   const baseId = `assistant-meal-item-${index + 1}`;
+
+  React.useEffect(() => {
+    if (!focusNewRow) return;
+    searchInput.current?.focus();
+    searchInput.current?.scrollIntoView?.({ block: 'nearest' });
+    onFocused();
+  }, [focusNewRow, onFocused]);
 
   React.useEffect(() => {
     setFoods([]);
@@ -74,6 +86,7 @@ function AssistantFoodPicker({
       )}
       <label htmlFor={`${baseId}-search`}>Search food {index + 1} in your catalogue
         <input
+          ref={searchInput}
           id={`${baseId}-search`}
           value={query}
           onChange={(event) => {
@@ -116,6 +129,7 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
   const [mealName, setMealName] = React.useState('Meal from assistant');
   const [mealType, setMealType] = React.useState('snack');
   const [mealItems, setMealItems] = React.useState<DraftMealItem[]>(() => [{ id: crypto.randomUUID(), foodId: '', grams: 100 }]);
+  const [focusItemId, setFocusItemId] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<Preview | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -182,6 +196,13 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
     setMealItems((current) => current.map((item, itemIndex) => itemIndex === index ? value : item));
   }
 
+  function addMealItem() {
+    if (mealItems.length >= 10) return;
+    const nextItem = { id: crypto.randomUUID(), foodId: '', grams: 100 };
+    setFocusItemId(nextItem.id);
+    setMealItems((current) => current.length < 10 ? [...current, nextItem] : current);
+  }
+
   return (
     <section className="assistant-action" aria-label="Assistant actions">
       {notice && <p className="action-notice" role="status">{notice}</p>}
@@ -236,13 +257,15 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
                     onChange={(value) => updateMealItem(index, value)}
                     onRemove={() => setMealItems((current) => current.filter((entry) => entry.id !== item.id))}
                     removable={mealItems.length > 1}
+                    focusNewRow={focusItemId === item.id}
+                    onFocused={() => setFocusItemId(null)}
                   />
                 ))}
               </div>
               <button
                 type="button"
                 className="button assistant-add-food"
-                onClick={() => setMealItems((current) => current.length < 10 ? [...current, { id: crypto.randomUUID(), foodId: '', grams: 100 }] : current)}
+                onClick={addMealItem}
                 disabled={mealItems.length >= 10}
               >Add another food{mealItems.length >= 10 ? ' (10 maximum)' : ''}</button>
               <button className="button primary" disabled={busy || mealItems.some((item) => !item.foodId)}>{busy ? 'Preparing…' : 'Preview meal'}</button>
