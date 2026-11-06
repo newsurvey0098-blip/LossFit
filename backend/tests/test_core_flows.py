@@ -311,6 +311,8 @@ def test_assistant_action_preview_is_private_cancelable_and_rechecked_before_wri
     with TestClient(app) as owner,TestClient(app) as other:
         register(owner);owner_headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
         conversation=owner.post('/api/v1/assistant/conversations',headers=owner_headers).json()
+        oversized_meal={"conversation_id":conversation['id'],"action":"log_meal","meal":{"name":"Too many foods","meal_type":"lunch","items":[{"name":f"Food {index}","grams":100} for index in range(11)]},"idempotency_key":uuid4().hex}
+        assert owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json=oversized_meal).status_code==422
         base={"conversation_id":conversation['id'],"action":"log_water","water_ml":250}
         canceled=owner.post('/api/v1/assistant/actions/preview',headers=owner_headers,json={**base,"idempotency_key":uuid4().hex}).json()
         assert owner.post(f"/api/v1/assistant/actions/{canceled['id']}/cancel",headers=owner_headers).status_code==204

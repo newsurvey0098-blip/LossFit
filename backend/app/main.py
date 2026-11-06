@@ -339,6 +339,7 @@ class AssistantActionPreviewIn(BaseModel):
     def validate_arguments(self):
         if self.action=="log_water" and (self.water_ml is None or self.meal is not None):raise ValueError("Water actions need an amount and cannot include a meal")
         if self.action=="log_meal" and (self.meal is None or self.water_ml is not None or not self.meal.items):raise ValueError("Meal actions need at least one meal item and cannot include a water amount")
+        if self.action=="log_meal" and self.meal and len(self.meal.items)>10:raise ValueError("Meal actions can include at most 10 items")
         if self.meal and self.meal.eaten_at and self.meal.eaten_at.tzinfo is None:raise ValueError("Meal time must include a timezone")
         return self
 class QuizSubmissionIn(BaseModel): answers:list[int]=Field(min_length=1,max_length=10)
