@@ -80,7 +80,7 @@ class GoogleOAuthState(Base):
     state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     nonce: Mapped[str] = mapped_column(String(128))
-    code_verifier: Mapped[str] = mapped_column(String(128))
+    code_verifier: Mapped[str] = mapped_column(String(512))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 class Food(Base):
@@ -150,7 +150,7 @@ class RateLimitBucket(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     scope: Mapped[str] = mapped_column(String(40))
     subject_digest: Mapped[str] = mapped_column(String(64))
-    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     count: Mapped[int] = mapped_column(default=0)
 class Meal(Base):
     __tablename__ = "meals"

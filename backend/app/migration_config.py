@@ -16,3 +16,10 @@ def configured_migration_database_url(env):
             "do not use the application runtime database role"
         )
     return migration_url or env.get("DATABASE_URL")
+
+
+def include_alembic_object(_object, name, type_, reflected, compare_to):
+    """Keep the optional, extension-created pgvector sidecar out of ORM diffs."""
+    if type_ == "table" and name == "knowledge_vector_embeddings" and reflected and compare_to is None:
+        return False
+    return True

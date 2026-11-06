@@ -10,7 +10,7 @@ from backend.app.production import (
     database_engine_options,
     validate_production_environment,
 )
-from backend.app.migration_config import configured_migration_database_url
+from backend.app.migration_config import configured_migration_database_url, include_alembic_object
 
 
 def valid():
@@ -165,3 +165,9 @@ def test_migrations_prefer_the_separate_migration_connection():
 def test_local_migrations_keep_using_the_disposable_database_url():
     local_url = "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit"
     assert configured_migration_database_url({"DATABASE_URL": local_url}) == local_url
+
+
+def test_autogenerate_ignores_only_unmapped_pgvector_sidecar():
+    assert not include_alembic_object(object(), "knowledge_vector_embeddings", "table", True, None)
+    assert include_alembic_object(object(), "users", "table", True, None)
+    assert include_alembic_object(object(), "knowledge_vector_embeddings", "table", False, object())

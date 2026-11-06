@@ -12,6 +12,12 @@ from backend.app.knowledge import cosine
 from backend.app.food_import import normalize_foundation_food
 from backend.app.deletion_ledger import export_ledger, verify_ledger
 
+def test_model_metadata_matches_oauth_and_rate_limit_migrations():
+    verifier_column=main.GoogleOAuthState.__table__.c.code_verifier
+    encrypted=main.oauth_secret_box().encrypt(b"v"*43).decode()
+    assert len(encrypted)<=verifier_column.type.length
+    assert any(index.columns.keys()==["window_start"] for index in main.RateLimitBucket.__table__.indexes)
+
 def test_readiness_requires_current_migrations(monkeypatch):
     with TestClient(app) as client:
         ready=client.get('/api/v1/health/ready')

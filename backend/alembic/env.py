@@ -3,7 +3,7 @@ import os
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from backend.app.main import Base
-from backend.app.migration_config import configured_migration_database_url
+from backend.app.migration_config import configured_migration_database_url, include_alembic_object
 config=context.config
 migration_url=configured_migration_database_url(os.environ)
 if migration_url: config.set_main_option("sqlalchemy.url",migration_url.replace("%","%%"))
@@ -15,6 +15,6 @@ def run_migrations_offline():
 def run_migrations_online():
     connectable=engine_from_config(config.get_section(config.config_ini_section,{}),prefix="sqlalchemy.",poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection,target_metadata=target_metadata,compare_type=True)
+        context.configure(connection=connection,target_metadata=target_metadata,compare_type=True,include_object=include_alembic_object)
         with context.begin_transaction(): context.run_migrations()
 run_migrations_offline() if context.is_offline_mode() else run_migrations_online()
