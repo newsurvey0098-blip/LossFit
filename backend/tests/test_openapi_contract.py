@@ -59,3 +59,37 @@ def test_every_json_success_response_has_a_declared_schema():
         and response.get("content", {}).get("application/json", {}).get("schema") == {}
     ]
     assert missing == []
+
+
+def test_every_private_api_route_requires_an_authenticated_user():
+    from fastapi.routing import APIRoute
+
+    from backend.app.main import app, current_user
+
+    public_routes = {
+        "/api/v1/health/live",
+        "/api/v1/health/ready",
+        "/api/v1/auth/register",
+        "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/reset-password",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/google/callback",
+    }
+
+    def has_authenticated_user_dependency(dependant) -> bool:
+        return dependant.call is current_user or any(
+            has_authenticated_user_dependency(child) for child in dependant.dependencies
+        )
+
+    unprotected = [
+        f"{method} {route.path}"
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and route.path.startswith("/api/v1/")
+        and route.path not in public_routes
+        and not has_authenticated_user_dependency(route.dependant)
+        for method in route.methods or []
+    ]
+    assert unprotected == []
