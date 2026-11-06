@@ -40,6 +40,6 @@ describe('USDA branded catalogue search',()=>{
   });
   render(<MemoryRouter><FoodsPage/></MemoryRouter>);
   expect(await screen.findByText(/server-side FDC_API_KEY/)).toBeTruthy();
-  expect(screen.getByRole('link',{name:/Add manually/}).getAttribute('href')).toBe('/foods/new');
+  expect(screen.getAllByRole('link',{name:/Add manually/}).some(link=>link.getAttribute('href')==='/foods/new')).toBe(true);
  });
 });

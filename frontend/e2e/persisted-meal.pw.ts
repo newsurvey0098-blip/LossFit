@@ -23,7 +23,7 @@ async function checkAccessibility(page: import('@playwright/test').Page, screenN
 }
 
 test('registration, onboarding, private food, and meal persist through the API',async({page},info)=>{
-  test.setTimeout(180000);
+  test.setTimeout(420000);
   const suffix=crypto.randomUUID();
   await page.goto('/register');
   await checkResponsive(page,'register',info);

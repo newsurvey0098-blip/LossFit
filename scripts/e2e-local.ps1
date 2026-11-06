@@ -1,3 +1,4 @@
+param([string]$TestFile)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $pgBin = 'C:\Program Files\PostgreSQL\18\bin'
@@ -61,7 +62,9 @@ try {
 
   Push-Location (Join-Path $root 'frontend')
   try {
-    & (Join-Path $root '.runtime/node-v22.23.4-win-x64/npm.cmd') run test:e2e
+    $testArgs = @()
+    if ($TestFile) { $testArgs = @('--', $TestFile) }
+    & (Join-Path $root '.runtime/node-v22.23.4-win-x64/npm.cmd') run test:e2e @testArgs
     if ($LASTEXITCODE -ne 0) { throw 'Browser E2E suite failed.' }
   } finally { Pop-Location }
 } finally {

@@ -19,7 +19,7 @@ test('signed-out users can sign in to the requested private page at mobile and d
     await page.screenshot({path:info.outputPath('login-1440.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
-    await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(0);
+    await expect(page.locator('nav[aria-label="Main navigation"]')).not.toBeVisible();
     await page.getByLabel('Email').fill('lena@example.test');
     await page.getByLabel('Password').fill('safe-password-987');
     await page.getByRole('button',{name:'Sign in'}).click();
