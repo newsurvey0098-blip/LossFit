@@ -5,9 +5,10 @@ import AxeBuilder from '@axe-core/playwright';
 async function checkResponsive(page: import('@playwright/test').Page, screenName:string, info:import('@playwright/test').TestInfo){
   for(const [width,height] of [[320,800],[390,844],[768,1024],[1440,900]]){
     await page.setViewportSize({width,height});
-    const layout=await page.evaluate(()=>({viewport:window.innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(element=>({tag:element.tagName.toLowerCase(),className:typeof element.className==='string'?element.className:'',text:(element.textContent??'').trim().slice(0,50),right:Math.round(element.getBoundingClientRect().right)})).filter(element=>element.right>window.innerWidth+1).slice(0,6)}));
-    expect(layout.document<=layout.viewport,`${screenName} overflows horizontally at ${width}px: ${JSON.stringify(layout.offenders)}`).toBe(true);
-    if((screenName==='dashboard'||screenName==='food-detail'||screenName==='scanner'||screenName==='scanner-review'||screenName==='assistant'||screenName==='profile'||screenName==='help')&&(width===390||width===1440))
+    const layout=await page.evaluate(()=>{const main=document.querySelector('main#main-content')!;const dock=document.querySelector('nav.bottom');return {viewport:window.innerWidth,document:document.documentElement.scrollWidth,mainWidth:main.clientWidth,mainContent:main.scrollWidth,mainBottom:main.getBoundingClientRect().bottom,dockTop:dock?.getBoundingClientRect().top??null,offenders:[...main.querySelectorAll('*')].map(element=>({tag:element.tagName.toLowerCase(),className:typeof element.className==='string'?element.className:'',text:(element.textContent??'').trim().slice(0,50),right:Math.round(element.getBoundingClientRect().right)})).filter(element=>element.right>main.getBoundingClientRect().right+1).slice(0,6)}});
+    expect(layout.document<=layout.viewport&&layout.mainContent<=layout.mainWidth,`${screenName} overflows horizontally at ${width}px: ${JSON.stringify(layout.offenders)}`).toBe(true);
+    expect(layout.dockTop===null||layout.dockTop>=layout.mainBottom-1,`${screenName} navigation overlaps the scrolling content at ${width}px`).toBe(true);
+    if(width===390||width===1440)
       await page.screenshot({path:info.outputPath(`${screenName}-${width}.png`),fullPage:true});
   }
   await page.setViewportSize({width:390,height:844});

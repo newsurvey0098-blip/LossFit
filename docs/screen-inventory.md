@@ -35,7 +35,7 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 ## Global responsive and accessibility requirements
 
 - Use semantic landmarks, real links/buttons, associated labels, keyboard navigation, visible focus indicators, screen-reader status/error announcements, sufficient contrast, and layouts that remain usable at 200% zoom.
-- Verify mobile, tablet, and desktop breakpoints. Keep bottom navigation clear of scanner controls, form actions, and dialogs; allow content to scroll behind fixed navigation with safe-area padding.
+- Verify mobile, tablet, and desktop breakpoints. Keep bottom navigation clear of scanner controls, form actions, and dialogs; authenticated routes put the dock in a separate app-shell row while main content scrolls independently.
 - Provide loading, empty, success, and error states for every asynchronous view. No inert placeholder links or unreported unavailable integrations.
 - Keep all forms usable with keyboard and touch; honor reduced-motion settings.
 - Food nutrition status is shown per nutrient; absent values remain unavailable, source attribution is linked, and preparation variants/portion weights remain distinct.
