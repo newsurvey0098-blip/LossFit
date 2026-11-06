@@ -9,7 +9,7 @@ LossFit is a nutrition tracking application being built from the supplied screen
 3. On first setup, add the shared food catalogue with `powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1 -ImportFoods`; the command is safe to rerun and imports the pinned USDA releases.
 4. Run `scripts/start-dev.ps1`. Frontend is at `http://127.0.0.1:5173`; API at `http://127.0.0.1:3001/docs`.
 
-The initial migration was applied to an empty local database. The current schema is an early foundation and is not production ready.
+The initial migration was applied to an empty local database. The application schema is maintained through versioned Alembic migrations and is covered by fresh-database tests. The provisioned production database is still empty; production migrations cannot run until its connection credentials are configured.
 
 Password reset is enabled only when `SMTP_HOST` and `SMTP_FROM` are set. Configure an SMTP relay with `SMTP_SECURITY=ssl` (typically port 465) or `SMTP_SECURITY=starttls` (typically port 587), credentials where required, and `APP_BASE_URL` for the reset link. TLS certificates and hostnames are verified against the system trust store. Without SMTP, the endpoint returns the same privacy-preserving response but cannot deliver a reset email.
 
@@ -31,7 +31,7 @@ Account deletion removes the account's application records in one database trans
 
 ## Production operations
 
-See [deployment and monitoring](docs/deployment.md) for the production environment template, fail-closed HTTPS/secret checks, sanitized JSON request events, production launcher, reverse-proxy template, and verification gates. No deployment or external alert destination has been verified.
+See [deployment and monitoring](docs/deployment.md) for the production environment template, fail-closed HTTPS/secret checks, sanitized JSON request events, production launcher, reverse-proxy template, and verification gates. The frontend is deployed at [lossfit-oa1h.vercel.app](https://lossfit-oa1h.vercel.app); its API health route currently fails because production `DATABASE_URL` is not configured. Production data workflows and an external alert destination have not been verified.
 
 Set `ENVIRONMENT=production`, a random secret, HTTPS origins, restricted CORS, provider credentials only in the backend secret store, and private upload storage outside the web root. Enable database backups with `pg_dump -Fc`; restore to an isolated database with `pg_restore --clean --if-exists`. Establish encrypted offsite retention and deletion-ledger replay before production. Configure error monitoring with request-body and credential scrubbing.
 
@@ -39,4 +39,4 @@ See [backup and restore procedures](docs/backup-restore.md) for Windows PowerShe
 
 ## Implementation status
 
-See the [screen inventory](docs/screen-inventory.md), [acceptance status matrix](docs/acceptance-matrix.md), [verification record](docs/verification.md), and [GitHub milestone workflow](docs/github-workflow.md). LossFit has persisted account, nutrition, meal, assistant, analytics, privacy, learning, and reminder workflows with automated API and browser verification. The acceptance records identify features that remain partial, unavailable, or unverified. Live AI/OAuth integrations and production deployment have not been verified; the application is not yet production ready.
+See the [screen inventory](docs/screen-inventory.md), [acceptance status matrix](docs/acceptance-matrix.md), [verification record](docs/verification.md), and [GitHub milestone workflow](docs/github-workflow.md). LossFit has persisted account, nutrition, meal, assistant, analytics, privacy, learning, and reminder workflows with automated API and browser verification. The acceptance records identify features that remain partial, unavailable, or unverified. Vercel builds and serves the frontend, but production API health and database-backed flows remain unverified until `DATABASE_URL` is configured and the production migration is applied. Live AI/OAuth integrations also remain unverified; the application is not yet production ready.
