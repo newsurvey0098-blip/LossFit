@@ -404,6 +404,17 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.reload();
   await expect(page.locator('.bubble.user p')).toHaveText('Will this meal fit my day?');
   await expect(page.getByText('This is a deterministic test response based on your saved nutrition log.')).toBeVisible();
+  const outagePrompt='simulate the temporary provider outage and retry this question';
+  const composer=page.getByLabel('Message the nutrition assistant');
+  await composer.fill(outagePrompt);
+  await page.getByRole('button',{name:'Send message'}).click();
+  await expect(page.getByRole('alert')).toContainText('Your message was not saved');
+  await expect(composer).toHaveValue(outagePrompt);
+  await page.getByRole('button',{name:'Retry'}).click();
+  await expect(page.locator('.bubble.user p').filter({hasText:outagePrompt})).toHaveCount(1);
+  await expect(page.locator('.bubble.assistant p').filter({hasText:'This is a deterministic test response'})).toHaveCount(2);
+  await page.reload();
+  await expect(page.locator('.bubble.user p').filter({hasText:outagePrompt})).toHaveCount(1);
   await page.getByLabel('Message the nutrition assistant').fill('Please log 250 ml of water');
   await page.getByRole('button',{name:'Send message'}).click();
   await expect(page.getByText('Proposed water: 250 ml')).toBeVisible({timeout:15000});

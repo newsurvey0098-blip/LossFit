@@ -5,6 +5,8 @@ import os
 import sys
 from urllib.parse import urlparse
 
+FAILED_ASSISTANT_PROMPTS=set()
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -43,6 +45,16 @@ class Handler(BaseHTTPRequestHandler):
             elif isinstance(content, list):
                 user_parts.extend(item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text")
         user_text = " ".join(user_parts).casefold()
+        outage_prompt="simulate the temporary provider outage and retry this question"
+        if outage_prompt in user_text and outage_prompt not in FAILED_ASSISTANT_PROMPTS:
+            FAILED_ASSISTANT_PROMPTS.add(outage_prompt)
+            encoded=json.dumps({"error":{"message":"Deterministic provider outage for retry verification."}}).encode()
+            self.send_response(503)
+            self.send_header("Content-Type","application/json")
+            self.send_header("Content-Length",str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         if "log my weight as 68.4 kg" in user_text:
             message = {"tool_calls": [{"id": "call-local-weight", "type": "function", "function": {"name": "propose_weight", "arguments": '{"weight_kg":68.4}'}}]}
         elif "log 250 ml of water" in user_text:
