@@ -44,5 +44,6 @@ urllib3==2.8.0
 tzdata==2026.6
 uvicorn==0.54.0
 cryptography==50.0.2
+vercel-blob==0.5.1
 pyasn1==0.6.5
 pyasn1-modules==0.4.2

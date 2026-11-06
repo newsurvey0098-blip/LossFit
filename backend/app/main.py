@@ -1,7 +1,7 @@
 """LossFit API foundation with persisted accounts, foods and meal snapshots."""
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-import os, secrets, csv, io, json, ssl
+import os, secrets, csv, io, json, ssl, asyncio
 import hashlib, hmac, smtplib
 from uuid import uuid4
 from email.message import EmailMessage
@@ -16,7 +16,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, UploadFile, File
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from dotenv import load_dotenv
@@ -28,6 +28,7 @@ from .monitoring import RequestMonitoring
 from .production import validate_production_environment
 from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
+from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
 
 load_dotenv()
 validate_production_environment(os.environ)
@@ -783,18 +784,20 @@ def drain_private_file_cleanup(s:Session,limit:int=100)->dict:
     removed=failed=0;completed=[];now=datetime.now(timezone.utc)
     for item in pending:
         try:
-            path=Path(item.private_path).resolve()
-        except (OSError,RuntimeError,ValueError):
-            item.attempts+=1;item.last_attempt_at=now;failed+=1;continue
-        if root not in path.parents:
-            item.attempts+=1;item.last_attempt_at=now;failed+=1;continue
-        try:
-            path.unlink(missing_ok=True);completed.append(item.id);removed+=1
-        except OSError:
+            if not item.private_path.startswith("blob:"):
+                path=Path(item.private_path).resolve()
+                if root not in path.parents:raise ValueError("Private file is outside the configured storage directory")
+            remove_private_image_sync(item.private_path)
+            completed.append(item.id);removed+=1
+        except Exception:
             item.attempts+=1;item.last_attempt_at=now;failed+=1
     if completed:s.execute(delete(PrivateFileCleanup).where(PrivateFileCleanup.id.in_(completed)))
     s.commit()
     return {"removed":removed,"failed":failed,"remaining":s.scalar(select(func.count()).select_from(PrivateFileCleanup)) or 0}
+
+def drain_pending_private_file_cleanup()->dict:
+    with SessionLocal() as cleanup_session:
+        return drain_private_file_cleanup(cleanup_session)
 
 @app.get("/api/v1/foods/favorites",response_model=list[FoodOut],response_model_exclude_unset=True)
 def favorite_foods(s:Session=Depends(db),u:User=Depends(current_user)):
@@ -838,28 +841,23 @@ async def upload_food_image(food_id:int,image:UploadFile=File(...),s:Session=Dep
     if not food:raise HTTPException(404,"Personal food not found")
     if (image.content_type or "").lower() not in {"image/jpeg","image/png","image/webp"}:raise HTTPException(415,"Upload a JPEG, PNG, or WebP image")
     clean=inspect_food_image(await image.read(12*1024*1024+1))
-    root=Path(os.getenv("PRIVATE_UPLOAD_DIR",".local/uploads")).resolve();user_dir=(root/str(u.id)).resolve()
-    if root not in user_dir.parents:raise HTTPException(500,"Private upload storage is misconfigured")
-    user_dir.mkdir(parents=True,exist_ok=True);path=(user_dir/(str(uuid4())+".jpg")).resolve()
-    if user_dir not in path.parents:raise HTTPException(500,"Private upload storage is misconfigured")
-    path.write_bytes(clean)
-    if os.name!="nt":os.chmod(user_dir,0o700);os.chmod(path,0o600)
-    old_path=food.image_path;food.image_path=str(path)
+    private_path=await store_private_image(u.id,"food",clean)
+    old_path=food.image_path;food.image_path=private_path
     try:
         if old_path:queue_private_file_cleanup(s,old_path)
         s.commit()
     except Exception:
-        s.rollback();path.unlink(missing_ok=True);raise
-    drain_private_file_cleanup(s)
+        s.rollback();await remove_private_image(private_path);raise
+    await asyncio.to_thread(drain_pending_private_file_cleanup)
     return {"image_url":f"/api/v1/foods/{food.id}/image"}
 
-@app.get("/api/v1/foods/{food_id}/image",response_class=FileResponse,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
-def get_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+@app.get("/api/v1/foods/{food_id}/image",response_class=Response,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
+async def get_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     food=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not food or not food.image_path:raise HTTPException(404,"Image not found")
-    root=Path(os.getenv("PRIVATE_UPLOAD_DIR",".local/uploads")).resolve();path=Path(food.image_path).resolve()
-    if root not in path.parents or not path.is_file():raise HTTPException(404,"Image not found")
-    return FileResponse(path,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","Content-Disposition":"inline"})
+    try:content=await read_private_image(food.image_path,u.id,"food")
+    except FileNotFoundError:raise HTTPException(404,"Image not found") from None
+    return Response(content,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","Content-Disposition":"inline","X-Content-Type-Options":"nosniff"})
 
 @app.delete("/api/v1/foods/{food_id}/image",status_code=204)
 def delete_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
@@ -1136,20 +1134,14 @@ async def create_scan(request:Request,image:UploadFile=File(...),s:Session=Depen
     content_type=(image.content_type or "").lower()
     if content_type not in {"image/jpeg","image/png","image/webp"}:raise HTTPException(415,"Upload a JPEG, PNG, or WebP image")
     raw=await image.read(12*1024*1024+1);clean=inspect_food_image(raw);candidates=analyze_food_image(clean)
-    upload_root=Path(os.getenv("PRIVATE_UPLOAD_DIR",".local/uploads")).resolve();user_dir=(upload_root/str(u.id)).resolve()
-    if upload_root not in user_dir.parents:raise HTTPException(500,"Private upload storage is misconfigured")
-    user_dir.mkdir(parents=True,exist_ok=True);file_path=(user_dir/(str(uuid4())+".jpg")).resolve()
-    if user_dir not in file_path.parents:raise HTTPException(500,"Private upload storage is misconfigured")
-    file_path.write_bytes(clean)
-    if os.name!="nt":
-        os.chmod(user_dir,0o700);os.chmod(file_path,0o600)
+    private_path=await store_private_image(u.id,"scan",clean)
     try:
         reviewed=[{"id":str(index),**candidate,"matches":match_scan_candidate(candidate["name"],s,u)} for index,candidate in enumerate(candidates)]
-        scan=ScanSession(owner_id=u.id,private_path=str(file_path),candidates=reviewed,status="needs_review")
+        scan=ScanSession(owner_id=u.id,private_path=private_path,candidates=reviewed,status="needs_review")
         s.add(scan);s.commit();s.refresh(scan)
         return {"id":scan.id,"status":scan.status,"candidates":scan.candidates}
     except Exception:
-        s.rollback();file_path.unlink(missing_ok=True);raise
+        s.rollback();await remove_private_image(private_path);raise
 
 @app.get("/api/v1/scans/{scan_id}",response_model=ScanOut,response_model_exclude_unset=True)
 def get_scan(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
@@ -1157,13 +1149,13 @@ def get_scan(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     if not scan:raise HTTPException(404,"Scan not found")
     return {"id":scan.id,"status":scan.status,"candidates":scan.candidates,"meal_id":scan.meal_id,"image_url":f"/api/v1/scans/{scan.id}/image"}
 
-@app.get("/api/v1/scans/{scan_id}/image",response_class=FileResponse,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
-def get_scan_image(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+@app.get("/api/v1/scans/{scan_id}/image",response_class=Response,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
+async def get_scan_image(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id))
     if not scan:raise HTTPException(404,"Scan not found")
-    root=Path(os.getenv("PRIVATE_UPLOAD_DIR",".local/uploads")).resolve();path=Path(scan.private_path).resolve()
-    if root not in path.parents or not path.is_file():raise HTTPException(404,"Image not found")
-    return FileResponse(path,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","Content-Disposition":"inline"})
+    try:content=await read_private_image(scan.private_path,u.id,"scan")
+    except FileNotFoundError:raise HTTPException(404,"Image not found") from None
+    return Response(content,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","Content-Disposition":"inline","X-Content-Type-Options":"nosniff"})
 
 @app.post("/api/v1/scans/{scan_id}/confirm",response_model=ScanConfirmationOut)
 def confirm_scan(scan_id:int,data:ScanConfirmIn,request:Request,s:Session=Depends(db),u:User=Depends(current_user)):
