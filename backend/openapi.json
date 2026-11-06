@@ -14,7 +14,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
               }
             }
           }
@@ -30,7 +32,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
               }
             }
           }
@@ -150,7 +154,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
               }
             }
           },
@@ -186,7 +192,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
               }
             }
           },
@@ -241,7 +249,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleStatusOut"
+                }
               }
             }
           }
@@ -267,7 +277,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationURLApiOut"
+                }
               }
             }
           },
@@ -343,13 +355,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "303": {
+            "description": "Redirect to connected-account status"
           },
           "422": {
             "description": "Validation Error",
@@ -383,7 +390,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleUnlinkedOut"
+                }
               }
             }
           },
@@ -419,7 +428,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingOut"
+                }
               }
             }
           },
@@ -445,7 +456,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WeightOut"
+                  },
+                  "type": "array",
+                  "title": "Response Weight History Api V1 Weight Get"
+                }
               }
             }
           }
@@ -469,7 +486,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WeightOut"
+                }
               }
             }
           },
@@ -505,7 +524,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
               }
             }
           },
@@ -541,7 +562,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesOut"
+                }
               }
             }
           },
@@ -659,7 +682,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/BarcodeProductOut"
+                }
               }
             }
           },
@@ -706,7 +731,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -1007,7 +1034,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ImageURLOut"
+                }
               }
             }
           },
@@ -1041,8 +1070,11 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -1108,7 +1140,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -1155,7 +1189,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodServingOut"
+                }
               }
             }
           },
@@ -1572,7 +1608,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodStatusOut"
+                }
               }
             }
           }
@@ -1588,7 +1626,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodStatusOut"
+                }
               }
             }
           }
@@ -1614,7 +1654,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LabelExtraction"
+                }
               }
             }
           },
@@ -1650,7 +1692,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScanOut"
+                }
               }
             }
           },
@@ -1687,7 +1731,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScanOut"
+                }
               }
             }
           },
@@ -1753,8 +1799,11 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
               }
             }
           },
@@ -1801,7 +1850,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ScanConfirmationOut"
+                }
               }
             }
           },
@@ -1863,7 +1914,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NutritionExportOut"
+                }
               }
             }
           },
@@ -1924,8 +1977,10 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1982,7 +2037,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationSummaryOut"
+                  },
+                  "type": "array",
+                  "title": "Response Conversations Api V1 Assistant Conversations Get"
+                }
               }
             }
           }
@@ -1996,7 +2057,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSummaryOut"
+                }
               }
             }
           }
@@ -2032,7 +2095,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHistoryOut"
+                }
               }
             }
           },
@@ -2098,7 +2163,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantActionOut"
+                }
               }
             }
           },
@@ -2135,7 +2202,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantActionOut"
+                }
               }
             }
           },
@@ -2193,7 +2262,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LessonOut"
+                  },
+                  "type": "array",
+                  "title": "Response Learning Catalogue Api V1 Learning Get"
+                }
               }
             }
           }
@@ -2230,7 +2305,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LessonOut"
+                }
               }
             }
           },
@@ -2277,7 +2354,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LessonResultOut"
+                }
               }
             }
           },
@@ -2313,7 +2392,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantReplyOut"
+                }
               }
             }
           },
@@ -2352,7 +2433,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WaterOut"
+                }
               }
             }
           },
@@ -2472,6 +2555,54 @@
         ],
         "title": "AnalyticsWeightOut"
       },
+      "AssistantActionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "preview": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Preview"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "preview",
+          "status",
+          "expires_at"
+        ],
+        "title": "AssistantActionOut"
+      },
       "AssistantActionPreviewIn": {
         "properties": {
           "conversation_id": {
@@ -2525,6 +2656,127 @@
         ],
         "title": "AssistantActionPreviewIn"
       },
+      "AssistantHistoryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantActionOut"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantMessageOut"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "proposals",
+          "messages"
+        ],
+        "title": "AssistantHistoryOut"
+      },
+      "AssistantMessageOut": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "AssistantMessageOut"
+      },
+      "AssistantReplyOut": {
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "already_processed": {
+            "type": "boolean",
+            "title": "Already Processed"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "message",
+          "sources",
+          "already_processed"
+        ],
+        "title": "AssistantReplyOut"
+      },
       "AuthSessionOut": {
         "properties": {
           "access_token": {
@@ -2567,6 +2819,20 @@
         ],
         "title": "AuthSessionOut"
       },
+      "AuthorizationURLApiOut": {
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "title": "Authorization Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "authorization_url"
+        ],
+        "title": "AuthorizationURLApiOut"
+      },
       "BarcodeImportIn": {
         "properties": {
           "name": {
@@ -2585,6 +2851,143 @@
         },
         "type": "object",
         "title": "BarcodeImportIn"
+      },
+      "BarcodeNutrientsOut": {
+        "properties": {
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "BarcodeNutrientsOut"
+      },
+      "BarcodeProductOut": {
+        "properties": {
+          "barcode": {
+            "type": "string",
+            "title": "Barcode"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "nutrition_per": {
+            "type": "string",
+            "title": "Nutrition Per"
+          },
+          "nutrients": {
+            "$ref": "#/components/schemas/BarcodeNutrientsOut"
+          },
+          "verification": {
+            "type": "string",
+            "title": "Verification"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_record_id": {
+            "type": "string",
+            "title": "Source Record Id"
+          },
+          "source_url": {
+            "type": "string",
+            "title": "Source Url"
+          },
+          "data_notes": {
+            "type": "string",
+            "title": "Data Notes"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "barcode",
+          "name",
+          "nutrition_per",
+          "nutrients",
+          "verification",
+          "source",
+          "source_record_id",
+          "source_url",
+          "data_notes"
+        ],
+        "title": "BarcodeProductOut"
       },
       "Body_analyze_label_api_v1_labels_analyze_post": {
         "properties": {
@@ -2656,6 +3059,110 @@
         ],
         "title": "ChatIn"
       },
+      "CitationOut": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "ref"
+        ],
+        "title": "CitationOut"
+      },
+      "ConversationSummaryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "ConversationSummaryOut"
+      },
       "DailySummaryOut": {
         "properties": {
           "date": {
@@ -2713,6 +3220,151 @@
           "confirmation"
         ],
         "title": "DeleteAccountIn"
+      },
+      "ExportFilterOut": {
+        "properties": {
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ExportFilterOut"
+      },
+      "ExportMealOut": {
+        "properties": {
+          "meal_id": {
+            "type": "integer",
+            "title": "Meal Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "meal_type": {
+            "type": "string",
+            "title": "Meal Type"
+          },
+          "eaten_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Eaten At"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "nutrition": {
+            "$ref": "#/components/schemas/ExportNutritionOut"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "meal_id",
+          "name",
+          "meal_type",
+          "eaten_at",
+          "items",
+          "nutrition"
+        ],
+        "title": "ExportMealOut"
+      },
+      "ExportNutritionOut": {
+        "properties": {
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein G"
+          },
+          "carbs_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs G"
+          },
+          "fat_g": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat G"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ExportNutritionOut"
+      },
+      "ExportUserOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "name",
+          "email"
+        ],
+        "title": "ExportUserOut"
       },
       "FoodIn": {
         "properties": {
@@ -3113,6 +3765,31 @@
         ],
         "title": "FoodServingOut"
       },
+      "FoodStatusOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "FoodStatusOut"
+      },
       "ForgotPasswordIn": {
         "properties": {
           "email": {
@@ -3126,6 +3803,57 @@
           "email"
         ],
         "title": "ForgotPasswordIn"
+      },
+      "GoalsOut": {
+        "properties": {
+          "calories": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calories"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "GoalsOut"
       },
       "GoogleLinkIn": {
         "properties": {
@@ -3142,6 +3870,37 @@
         ],
         "title": "GoogleLinkIn"
       },
+      "GoogleStatusOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "linked": {
+            "type": "boolean",
+            "title": "Linked"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "available",
+          "linked"
+        ],
+        "title": "GoogleStatusOut"
+      },
       "GoogleUnlinkIn": {
         "properties": {
           "password": {
@@ -3157,6 +3916,20 @@
         ],
         "title": "GoogleUnlinkIn"
       },
+      "GoogleUnlinkedOut": {
+        "properties": {
+          "linked": {
+            "type": "boolean",
+            "title": "Linked"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "linked"
+        ],
+        "title": "GoogleUnlinkedOut"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3169,6 +3942,173 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HealthOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthOut"
+      },
+      "ImageURLOut": {
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "title": "Image Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "image_url"
+        ],
+        "title": "ImageURLOut"
+      },
+      "LabelExtraction": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "serving_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Label"
+          },
+          "serving_grams": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Grams"
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "per_serving",
+              "per_100g",
+              "unknown"
+            ],
+            "title": "Basis",
+            "default": "unknown"
+          },
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          }
+        },
+        "type": "object",
+        "title": "LabelExtraction"
       },
       "LabelFoodIn": {
         "properties": {
@@ -3273,6 +4213,203 @@
           "serving_grams"
         ],
         "title": "LabelFoodIn"
+      },
+      "LessonOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "simple": {
+            "type": "string",
+            "title": "Simple"
+          },
+          "detailed": {
+            "type": "string",
+            "title": "Detailed"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/LessonSourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "quiz": {
+            "$ref": "#/components/schemas/LessonQuizOut"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LessonProgressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "category",
+          "minutes",
+          "version",
+          "summary",
+          "simple",
+          "detailed",
+          "content",
+          "sources",
+          "quiz"
+        ],
+        "title": "LessonOut"
+      },
+      "LessonProgressOut": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "score",
+          "completed_at",
+          "version"
+        ],
+        "title": "LessonProgressOut"
+      },
+      "LessonQuizOut": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "question",
+          "options",
+          "explanation"
+        ],
+        "title": "LessonQuizOut"
+      },
+      "LessonResultOut": {
+        "properties": {
+          "lesson_slug": {
+            "type": "string",
+            "title": "Lesson Slug"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "correct": {
+            "type": "boolean",
+            "title": "Correct"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "lesson_slug",
+          "score",
+          "total",
+          "correct",
+          "explanation",
+          "completed_at"
+        ],
+        "title": "LessonResultOut"
+      },
+      "LessonSourceOut": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "organization": {
+            "type": "string",
+            "title": "Organization"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "title",
+          "organization",
+          "url",
+          "version"
+        ],
+        "title": "LessonSourceOut"
       },
       "LoginIn": {
         "properties": {
@@ -3731,6 +4868,20 @@
         "type": "object",
         "title": "MealRemindersIn"
       },
+      "MessageOut": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageOut"
+      },
       "NutrientTotalsOut": {
         "properties": {
           "kcal": {
@@ -3781,6 +4932,37 @@
         "additionalProperties": true,
         "type": "object",
         "title": "NutrientTotalsOut"
+      },
+      "NutritionExportOut": {
+        "properties": {
+          "exported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exported At"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ExportFilterOut"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ExportUserOut"
+          },
+          "meals": {
+            "items": {
+              "$ref": "#/components/schemas/ExportMealOut"
+            },
+            "type": "array",
+            "title": "Meals"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "exported_at",
+          "filters",
+          "user",
+          "meals"
+        ],
+        "title": "NutritionExportOut"
       },
       "NutritionPer100": {
         "properties": {
@@ -3913,6 +5095,36 @@
         ],
         "title": "OnboardingIn"
       },
+      "OnboardingOut": {
+        "properties": {
+          "profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Profile"
+          },
+          "preferences": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Preferences"
+          },
+          "goals": {
+            "$ref": "#/components/schemas/GoalsOut"
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "profile",
+          "preferences",
+          "goals",
+          "notice"
+        ],
+        "title": "OnboardingOut"
+      },
       "PreferencesIn": {
         "properties": {
           "diet": {
@@ -3959,6 +5171,21 @@
           "units"
         ],
         "title": "PreferencesIn"
+      },
+      "PreferencesOut": {
+        "properties": {
+          "preferences": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Preferences"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "preferences"
+        ],
+        "title": "PreferencesOut"
       },
       "ProfileIn": {
         "properties": {
@@ -4126,6 +5353,38 @@
         ],
         "title": "ResetPasswordIn"
       },
+      "ScanCandidateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "grams": {
+            "type": "number",
+            "title": "Grams"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/ScanMatchOut"
+            },
+            "type": "array",
+            "title": "Matches"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "grams",
+          "matches"
+        ],
+        "title": "ScanCandidateOut"
+      },
       "ScanConfirmIn": {
         "properties": {
           "name": {
@@ -4208,6 +5467,107 @@
           "grams"
         ],
         "title": "ScanConfirmItemIn"
+      },
+      "ScanConfirmationOut": {
+        "properties": {
+          "meal": {
+            "$ref": "#/components/schemas/MealOut"
+          },
+          "already_confirmed": {
+            "type": "boolean",
+            "title": "Already Confirmed"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "meal",
+          "already_confirmed"
+        ],
+        "title": "ScanConfirmationOut"
+      },
+      "ScanMatchOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "verification": {
+            "type": "string",
+            "title": "Verification"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state",
+          "verification",
+          "score"
+        ],
+        "title": "ScanMatchOut"
+      },
+      "ScanOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ScanCandidateOut"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "meal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meal Id"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "candidates"
+        ],
+        "title": "ScanOut"
       },
       "UserOut": {
         "properties": {
@@ -4292,6 +5652,25 @@
         ],
         "title": "ValidationError"
       },
+      "WaterOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "ml": {
+            "type": "integer",
+            "title": "Ml"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "ml"
+        ],
+        "title": "WaterOut"
+      },
       "WeightIn": {
         "properties": {
           "weight_kg": {
@@ -4318,6 +5697,31 @@
           "weight_kg"
         ],
         "title": "WeightIn"
+      },
+      "WeightOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "weight_kg": {
+            "type": "number",
+            "title": "Weight Kg"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "weight_kg",
+          "recorded_at"
+        ],
+        "title": "WeightOut"
       }
     }
   }

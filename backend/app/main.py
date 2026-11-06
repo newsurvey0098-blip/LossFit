@@ -16,7 +16,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from dotenv import load_dotenv
@@ -373,6 +373,43 @@ class DailySummaryOut(ApiResponse):
 class AnalyticsDayOut(ApiResponse):date:date;totals:NutrientTotalsOut;meal_count:int
 class AnalyticsWeightOut(ApiResponse):weight_kg:float;recorded_at:datetime
 class AnalyticsRangeOut(ApiResponse):days:int;start_date:date;end_date:date;daily:list[AnalyticsDayOut];weights:list[AnalyticsWeightOut]
+class HealthOut(ApiResponse):status:str;service:str|None=None;database:str|None=None
+class MessageOut(ApiResponse):message:str
+class GoogleStatusOut(ApiResponse):available:bool;linked:bool;email:EmailStr|None=None
+class GoogleUnlinkedOut(ApiResponse):linked:bool
+class AuthorizationURLApiOut(ApiResponse):authorization_url:str
+class OnboardingOut(ApiResponse):profile:dict[str,Any];preferences:dict[str,Any];goals:GoalsOut;notice:str
+class PreferencesOut(ApiResponse):preferences:dict[str,Any]
+class WeightOut(ApiResponse):id:int;weight_kg:float;recorded_at:datetime
+class BarcodeNutrientsOut(ApiResponse):kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+class BarcodeProductOut(ApiResponse):
+    barcode:str;name:str;brand:str|None=None;quantity:str|None=None;category:str|None=None;nutrition_per:str
+    nutrients:BarcodeNutrientsOut;verification:str;source:str;source_record_id:str;source_url:str;data_notes:str
+class ImageURLOut(ApiResponse):image_url:str
+class FoodStatusOut(ApiResponse):available:bool;message:str|None=None
+class ScanMatchOut(ApiResponse):id:int;name:str;state:str;verification:str;score:float
+class ScanCandidateOut(ApiResponse):id:str;name:str;grams:float;matches:list[ScanMatchOut]
+class ScanOut(ApiResponse):id:int;status:str;candidates:list[ScanCandidateOut];meal_id:int|None=None;image_url:str|None=None
+class ScanConfirmationOut(ApiResponse):meal:MealOut;already_confirmed:bool
+class ExportFilterOut(ApiResponse):start_date:date|None=None;end_date:date|None=None
+class ExportUserOut(ApiResponse):name:str;email:EmailStr
+class ExportNutritionOut(ApiResponse):kcal:float|None=None;protein_g:float|None=None;carbs_g:float|None=None;fat_g:float|None=None
+class ExportMealOut(ApiResponse):meal_id:int;name:str;meal_type:str;eaten_at:datetime;items:list[dict[str,Any]];nutrition:ExportNutritionOut
+class NutritionExportOut(ApiResponse):exported_at:datetime;filters:ExportFilterOut;user:ExportUserOut;meals:list[ExportMealOut]
+class ConversationSummaryOut(ApiResponse):id:int;title:str;created_at:datetime|None=None;updated_at:datetime|None=None
+class CitationOut(ApiResponse):ref:str;title:str|None=None;organization:str|None=None;url:str|None=None;version:str|int|None=None
+class AssistantMessageOut(ApiResponse):id:int|None=None;role:Literal["user","assistant"];content:str;citations:list[dict[str,Any]]=Field(default_factory=list);created_at:datetime|None=None
+class AssistantActionOut(ApiResponse):id:str;action:str;preview:dict[str,Any];status:str;expires_at:datetime;result:dict[str,Any]|None=None
+class AssistantHistoryOut(ApiResponse):id:int;title:str;proposals:list[AssistantActionOut];messages:list[AssistantMessageOut]
+class LessonSourceOut(ApiResponse):title:str;organization:str;url:str;version:str
+class LessonQuizOut(ApiResponse):question:str;options:list[str];explanation:str
+class LessonProgressOut(ApiResponse):score:int;completed_at:datetime;version:int
+class LessonOut(ApiResponse):
+    slug:str;title:str;category:str;minutes:int;version:int;summary:str;simple:str;detailed:str;content:str
+    sources:list[LessonSourceOut];quiz:LessonQuizOut;progress:LessonProgressOut|None=None
+class LessonResultOut(ApiResponse):lesson_slug:str;score:int;total:int;correct:bool;explanation:str;completed_at:datetime
+class AssistantReplyOut(ApiResponse):conversation_id:int;message:str;sources:list[CitationOut];already_processed:bool
+class WaterOut(ApiResponse):id:int;ml:int
 
 def clean_aliases(name:str,values:list[str])->list[str]:
     seen={name.strip().casefold()};out=[]
@@ -470,9 +507,9 @@ def send_password_reset_email(email:str,reset_url:str):
             if username:smtp.login(username,password or "")
             smtp.send_message(message)
     else:raise RuntimeError('SMTP_SECURITY must be ssl or starttls')
-@app.get("/api/v1/health/live")
+@app.get("/api/v1/health/live",response_model=HealthOut)
 def live(): return {"status":"ok","service":"lossfit"}
-@app.get("/api/v1/health/ready")
+@app.get("/api/v1/health/ready",response_model=HealthOut)
 def ready(s:Session=Depends(db)):
     try: s.execute(select(1)); return {"status":"ready","database":"connected"}
     except Exception: raise HTTPException(503,"Database unavailable")
@@ -515,7 +552,7 @@ def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)
     if not user:raise HTTPException(401,"Sign in again")
     new_raw=secrets.token_urlsafe(48);session.retry_token_hash=session.refresh_token_hash;session.retry_until=now+timedelta(seconds=30);session.retry_current_token=refresh_recovery_box().encrypt(new_raw.encode()).decode();session.refresh_token_hash=token_hash(new_raw);session.expires_at=now+timedelta(days=30);s.commit();set_auth_cookies(response,new_raw)
     return {"access_token":token(user,session.id)}
-@app.post("/api/v1/auth/forgot-password")
+@app.post("/api/v1/auth/forgot-password",response_model=MessageOut)
 def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db)):
     enforce_rate_limit(s,"reset_request_ip",request_ip(request),10,900)
     generic={"message":"If an account exists for that email, password reset instructions will be sent."}
@@ -530,7 +567,7 @@ def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db))
     except Exception:
         s.delete(entry);s.commit()
     return generic
-@app.post("/api/v1/auth/reset-password")
+@app.post("/api/v1/auth/reset-password",response_model=MessageOut)
 def reset_password(data:ResetPasswordIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"reset_attempt_ip",request_ip(request),15,900)
     digest=hashlib.sha256(data.token.encode()).hexdigest();entry=s.scalar(select(PasswordReset).where(PasswordReset.token_hash==digest,PasswordReset.used_at.is_(None),PasswordReset.expires_at>datetime.now(timezone.utc)))
@@ -553,11 +590,11 @@ def logout(request:Request,response:Response,s:Session=Depends(db)):
     response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
 @app.get("/api/v1/auth/me",response_model=UserOut,response_model_exclude_unset=True)
 def me(u:User=Depends(current_user)): return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
-@app.get("/api/v1/auth/google/status")
+@app.get("/api/v1/auth/google/status",response_model=GoogleStatusOut)
 def google_status(s:Session=Depends(db),u:User=Depends(current_user)):
     linked=s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==u.id))
     return {"available":google_oauth_configured(),"linked":bool(linked),"email":linked.email if linked else None}
-@app.post("/api/v1/auth/google/link/start")
+@app.post("/api/v1/auth/google/link/start",response_model=AuthorizationURLApiOut)
 def google_link_start(data:GoogleLinkIn,s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"google_link_start_user",str(u.id),5,3600)
     if not google_oauth_configured():raise HTTPException(503,"Google account linking is not configured")
@@ -574,11 +611,10 @@ def google_link_start(data:GoogleLinkIn,s:Session=Depends(db),u:User=Depends(cur
     from urllib.parse import urlencode
     params={"client_id":os.environ["GOOGLE_CLIENT_ID"],"redirect_uri":os.environ["GOOGLE_REDIRECT_URI"],"response_type":"code","scope":"openid email profile","state":raw_state,"nonce":nonce,"code_challenge":challenge,"code_challenge_method":"S256","prompt":"select_account"}
     return {"authorization_url":"https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(params)}
-@app.get("/api/v1/auth/google/callback")
+@app.get("/api/v1/auth/google/callback",status_code=303,response_class=RedirectResponse,responses={303:{"description":"Redirect to connected-account status"}})
 def google_link_callback(code:str|None=Query(default=None,max_length=2048),state:str|None=Query(default=None,min_length=32,max_length=128),error:str|None=Query(default=None,max_length=128),s:Session=Depends(db)):
     front=os.getenv("APP_BASE_URL","http://127.0.0.1:5173").rstrip("/")+"/settings/accounts"
     def finish(result:str):
-        from fastapi.responses import RedirectResponse
         return RedirectResponse(front+"?google="+result,status_code=303)
     if not state:return finish("invalid")
     now=datetime.now(timezone.utc);entry=s.scalar(select(GoogleOAuthState).where(GoogleOAuthState.state_hash==token_hash(state)).with_for_update())
@@ -602,7 +638,7 @@ def google_link_callback(code:str|None=Query(default=None,max_length=2048),state
         s.add(GoogleAccount(user_id=entry.user_id,provider_subject=subject,email=email.lower()))
         s.commit()
     return finish("linked")
-@app.post("/api/v1/auth/google/unlink")
+@app.post("/api/v1/auth/google/unlink",response_model=GoogleUnlinkedOut)
 def google_unlink(data:GoogleUnlinkIn,s:Session=Depends(db),u:User=Depends(current_user)):
     try:verified=hasher.verify(u.password_hash,data.password)
     except Exception:verified=False
@@ -610,7 +646,7 @@ def google_unlink(data:GoogleUnlinkIn,s:Session=Depends(db),u:User=Depends(curre
     account=s.scalar(select(GoogleAccount).where(GoogleAccount.user_id==u.id))
     if not account:raise HTTPException(404,"No Google account is linked")
     s.delete(account);s.commit();return {"linked":False}
-@app.post("/api/v1/users/onboarding")
+@app.post("/api/v1/users/onboarding",response_model=OnboardingOut,response_model_exclude_unset=True)
 def onboarding(data:OnboardingIn,s:Session=Depends(db),u:User=Depends(current_user)):
     try: ZoneInfo(data.timezone)
     except ZoneInfoNotFoundError: raise HTTPException(422,"Choose a valid timezone")
@@ -626,13 +662,13 @@ def onboarding(data:OnboardingIn,s:Session=Depends(db),u:User=Depends(current_us
     u.goals={"calories":calories,"protein":protein,"carbs":carbs,"fat":fat}
     s.add(WeightRecord(owner_id=u.id,weight_kg=data.weight_kg));s.commit()
     return {"profile":u.profile,"preferences":u.preferences,"goals":u.goals,"notice":"Targets are estimates for general wellness and should be adjusted to your needs. Seek qualified advice for medical or specialized nutrition needs."}
-@app.get("/api/v1/weight")
+@app.get("/api/v1/weight",response_model=list[WeightOut])
 def weight_history(s:Session=Depends(db),u:User=Depends(current_user)):
     return [{"id":r.id,"weight_kg":r.weight_kg,"recorded_at":r.recorded_at} for r in s.scalars(select(WeightRecord).where(WeightRecord.owner_id==u.id).order_by(WeightRecord.recorded_at.desc()).limit(365))]
-@app.post("/api/v1/weight",status_code=201)
+@app.post("/api/v1/weight",status_code=201,response_model=WeightOut)
 def add_weight(data:WeightIn,s:Session=Depends(db),u:User=Depends(current_user)):
     record=WeightRecord(owner_id=u.id,weight_kg=data.weight_kg,recorded_at=data.recorded_at or datetime.now(timezone.utc));s.add(record);u.profile={**u.profile,"weight_kg":data.weight_kg};s.commit();s.refresh(record);return {"id":record.id,"weight_kg":record.weight_kg,"recorded_at":record.recorded_at}
-@app.put("/api/v1/users/me")
+@app.put("/api/v1/users/me",response_model=UserOut,response_model_exclude_unset=True)
 def update_profile(data:ProfileIn,s:Session=Depends(db),u:User=Depends(current_user)):
     if data.name is not None:u.name=data.name.strip()
     if data.goals is not None:
@@ -640,7 +676,7 @@ def update_profile(data:ProfileIn,s:Session=Depends(db),u:User=Depends(current_u
         if set(data.goals)-allowed or any(v<1 or v>10000 for v in data.goals.values()):raise HTTPException(422,"Targets must be positive values for calories, protein, carbs, or fat")
         u.goals={**u.goals,**data.goals}
     s.commit();return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
-@app.put("/api/v1/users/preferences")
+@app.put("/api/v1/users/preferences",response_model=PreferencesOut,response_model_exclude_unset=True)
 def update_preferences(data:PreferencesIn,s:Session=Depends(db),u:User=Depends(current_user)):
     try:ZoneInfo(data.timezone)
     except ZoneInfoNotFoundError:raise HTTPException(422,"Choose a valid timezone")
@@ -718,13 +754,13 @@ def fetch_open_food_facts(code:str)->dict:
     except HTTPException:raise
     except (httpx.HTTPError,ValueError,TypeError,KeyError):raise HTTPException(503,"The product catalogue is temporarily unavailable. Try again later.")
 
-@app.get("/api/v1/barcodes/{raw_code}")
+@app.get("/api/v1/barcodes/{raw_code}",response_model=BarcodeProductOut,response_model_exclude_unset=True)
 def lookup_barcode(raw_code:str,s:Session=Depends(db),u:User=Depends(current_user)):
     code=normalize_gtin(raw_code)
     enforce_rate_limit(s,"barcode_lookup_user",str(u.id),20,600)
     return fetch_open_food_facts(code)
 
-@app.post("/api/v1/barcodes/{raw_code}/import",status_code=201)
+@app.post("/api/v1/barcodes/{raw_code}/import",status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
 def import_barcode(raw_code:str,data:BarcodeImportIn,s:Session=Depends(db),u:User=Depends(current_user)):
     code=normalize_gtin(raw_code)
     enforce_rate_limit(s,"barcode_import_user",str(u.id),10,3600)
@@ -795,7 +831,7 @@ def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     is_favorite=s.scalar(select(FoodFavorite.id).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id==food_id)) is not None
     return food_payload(f,s,is_favorite)
 
-@app.post("/api/v1/foods/{food_id}/image",status_code=201)
+@app.post("/api/v1/foods/{food_id}/image",status_code=201,response_model=ImageURLOut)
 async def upload_food_image(food_id:int,image:UploadFile=File(...),s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"food_image_upload_user",str(u.id),12,3600)
     food=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
@@ -817,7 +853,7 @@ async def upload_food_image(food_id:int,image:UploadFile=File(...),s:Session=Dep
     drain_private_file_cleanup(s)
     return {"image_url":f"/api/v1/foods/{food.id}/image"}
 
-@app.get("/api/v1/foods/{food_id}/image")
+@app.get("/api/v1/foods/{food_id}/image",response_class=FileResponse,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
 def get_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     food=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not food or not food.image_path:raise HTTPException(404,"Image not found")
@@ -838,7 +874,7 @@ def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     s.add(f);s.flush();s.add(FoodServing(food_id=f.id,label="100 g",grams=100,source="standard"))
     if data.serving_label and data.serving_grams:s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
-@app.post("/api/v1/foods/from-label",status_code=201)
+@app.post("/api/v1/foods/from-label",status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
 def add_label_food(data:LabelFoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     factor=100/data.serving_grams if data.basis=="per_serving" else 1
     per100={key:(None if value is None else round(value*factor,6)) for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat))}
@@ -858,7 +894,7 @@ def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(cur
     if data.serving_label and data.serving_grams and not s.scalar(select(FoodServing.id).where(FoodServing.food_id==f.id,FoodServing.label==data.serving_label.strip())):
         s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
-@app.post("/api/v1/foods/{food_id}/servings",status_code=201)
+@app.post("/api/v1/foods/{food_id}/servings",status_code=201,response_model=FoodServingOut)
 def add_food_serving(food_id:int,data:FoodServingIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not f:raise HTTPException(404,"Personal food not found")
@@ -1010,12 +1046,12 @@ def delete_food(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     if f.image_path:queue_private_file_cleanup(s,f.image_path)
     s.delete(f);s.commit()
     drain_private_file_cleanup(s)
-@app.get("/api/v1/scan/status")
+@app.get("/api/v1/scan/status",response_model=FoodStatusOut)
 def scan_status(u:User=Depends(current_user)):
     configured=bool(os.getenv("AI_BASE_URL") and os.getenv("AI_API_KEY") and (os.getenv("VISION_MODEL") or os.getenv("AI_MODEL")))
     return {"available":configured,"message":None if configured else "Food image analysis is not configured. You can still log a meal manually."}
 
-@app.get("/api/v1/labels/status")
+@app.get("/api/v1/labels/status",response_model=FoodStatusOut)
 def label_status(u:User=Depends(current_user)):
     configured=bool(os.getenv("AI_BASE_URL") and os.getenv("AI_API_KEY") and (os.getenv("VISION_MODEL") or os.getenv("AI_MODEL")))
     return {"available":configured,"message":None if configured else "Label photo reading is unavailable. You can still enter the package values manually."}
@@ -1077,7 +1113,7 @@ def analyze_nutrition_label(image_bytes:bytes)->LabelExtraction:
     except HTTPException:raise
     except Exception:raise HTTPException(503,"Label reading failed. The photo was not stored; retry or enter the values manually.")
 
-@app.post("/api/v1/labels/analyze")
+@app.post("/api/v1/labels/analyze",response_model=LabelExtraction,response_model_exclude_unset=True)
 async def analyze_label(request:Request,image:UploadFile=File(...),s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"label_image_user",str(u.id),5,600)
     if (image.content_type or "").lower() not in {"image/jpeg","image/png","image/webp"}:raise HTTPException(415,"Upload a JPEG, PNG, or WebP label image")
@@ -1094,7 +1130,7 @@ def match_scan_candidate(name:str,s:Session,u:User):
     ranked.sort(key=lambda pair:pair[0],reverse=True)
     return [{"id":food.id,"name":food.name,"state":food.state,"verification":food.verification,"score":round(score,2)} for score,food in ranked[:5]]
 
-@app.post("/api/v1/scans",status_code=201)
+@app.post("/api/v1/scans",status_code=201,response_model=ScanOut,response_model_exclude_unset=True)
 async def create_scan(request:Request,image:UploadFile=File(...),s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"scan_upload_user",str(u.id),3,600)
     content_type=(image.content_type or "").lower()
@@ -1115,13 +1151,13 @@ async def create_scan(request:Request,image:UploadFile=File(...),s:Session=Depen
     except Exception:
         s.rollback();file_path.unlink(missing_ok=True);raise
 
-@app.get("/api/v1/scans/{scan_id}")
+@app.get("/api/v1/scans/{scan_id}",response_model=ScanOut,response_model_exclude_unset=True)
 def get_scan(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id))
     if not scan:raise HTTPException(404,"Scan not found")
     return {"id":scan.id,"status":scan.status,"candidates":scan.candidates,"meal_id":scan.meal_id,"image_url":f"/api/v1/scans/{scan.id}/image"}
 
-@app.get("/api/v1/scans/{scan_id}/image")
+@app.get("/api/v1/scans/{scan_id}/image",response_class=FileResponse,responses={200:{"content":{"image/jpeg":{"schema":{"type":"string","format":"binary"}}}}})
 def get_scan_image(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id))
     if not scan:raise HTTPException(404,"Scan not found")
@@ -1129,7 +1165,7 @@ def get_scan_image(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user
     if root not in path.parents or not path.is_file():raise HTTPException(404,"Image not found")
     return FileResponse(path,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","Content-Disposition":"inline"})
 
-@app.post("/api/v1/scans/{scan_id}/confirm")
+@app.post("/api/v1/scans/{scan_id}/confirm",response_model=ScanConfirmationOut)
 def confirm_scan(scan_id:int,data:ScanConfirmIn,request:Request,s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"scan_confirm_user",str(u.id),20,600)
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id).with_for_update())
@@ -1149,14 +1185,14 @@ def delete_scan(scan_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     scan=s.scalar(select(ScanSession).where(ScanSession.id==scan_id,ScanSession.owner_id==u.id))
     if not scan:raise HTTPException(404,"Scan not found")
     queue_private_file_cleanup(s,scan.private_path);s.delete(scan);s.commit();drain_private_file_cleanup(s)
-@app.get("/api/v1/privacy/export.json")
+@app.get("/api/v1/privacy/export.json",response_model=NutritionExportOut,response_model_exclude_unset=True)
 def export_json(start_date:date|None=None,end_date:date|None=None,s:Session=Depends(db),u:User=Depends(current_user)):
     query=select(Meal).where(Meal.owner_id==u.id);start,end=local_date_bounds(start_date,end_date,u)
     if start:query=query.where(Meal.eaten_at>=start)
     if end:query=query.where(Meal.eaten_at<end)
     data=[{"meal_id":m.id,"name":m.name,"meal_type":m.meal_type,"eaten_at":m.eaten_at.isoformat(),"items":m.items,"nutrition":{"kcal":m.kcal,"protein_g":m.protein,"carbs_g":m.carbs,"fat_g":m.fat}} for m in s.scalars(query.order_by(Meal.eaten_at))]
     return {"exported_at":datetime.now(timezone.utc).isoformat(),"filters":{"start_date":start_date.isoformat() if start_date else None,"end_date":end_date.isoformat() if end_date else None},"user":{"name":u.name,"email":u.email},"meals":data}
-@app.get("/api/v1/privacy/export.csv")
+@app.get("/api/v1/privacy/export.csv",response_class=Response,responses={200:{"content":{"text/csv":{"schema":{"type":"string"}}}}})
 def export_csv(start_date:date|None=None,end_date:date|None=None,s:Session=Depends(db),u:User=Depends(current_user)):
     stream=io.StringIO();writer=csv.writer(stream);writer.writerow(["meal_id","name","meal_type","eaten_at","kcal","protein_g","carbs_g","fat_g","items_json"])
     query=select(Meal).where(Meal.owner_id==u.id);start,end=local_date_bounds(start_date,end_date,u)
@@ -1191,10 +1227,10 @@ def delete_account(data:DeleteAccountIn,response:Response,s:Session=Depends(db),
         s.rollback();raise
     drain_private_file_cleanup(s)
     response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
-@app.get("/api/v1/assistant/conversations")
+@app.get("/api/v1/assistant/conversations",response_model=list[ConversationSummaryOut],response_model_exclude_unset=True)
 def conversations(s:Session=Depends(db),u:User=Depends(current_user)):
     return [{"id":c.id,"title":c.title,"created_at":c.created_at,"updated_at":c.updated_at} for c in s.scalars(select(Conversation).where(Conversation.owner_id==u.id).order_by(Conversation.updated_at.desc()))]
-@app.post("/api/v1/assistant/conversations",status_code=201)
+@app.post("/api/v1/assistant/conversations",status_code=201,response_model=ConversationSummaryOut,response_model_exclude_unset=True)
 def new_conversation(s:Session=Depends(db),u:User=Depends(current_user)):
     c=Conversation(owner_id=u.id);s.add(c);s.commit();s.refresh(c);return {"id":c.id,"title":c.title}
 @app.delete("/api/v1/assistant/conversations",status_code=204)
@@ -1202,7 +1238,7 @@ def delete_all_conversations(s:Session=Depends(db),u:User=Depends(current_user))
     for c in s.scalars(select(Conversation).where(Conversation.owner_id==u.id)):
         s.delete(c)
     s.commit()
-@app.get("/api/v1/assistant/conversations/{conversation_id}")
+@app.get("/api/v1/assistant/conversations/{conversation_id}",response_model=AssistantHistoryOut,response_model_exclude_unset=True)
 def conversation_messages(conversation_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     c=s.scalar(select(Conversation).where(Conversation.id==conversation_id,Conversation.owner_id==u.id))
     if not c:raise HTTPException(404,"Conversation not found")
@@ -1243,12 +1279,12 @@ def prepare_assistant_action(data:AssistantActionPreviewIn,response:Response,s:S
     if commit:s.commit()
     return assistant_action_payload(action)
 
-@app.post("/api/v1/assistant/actions/preview",status_code=201)
+@app.post("/api/v1/assistant/actions/preview",status_code=201,response_model=AssistantActionOut,response_model_exclude_unset=True)
 def preview_assistant_action(data:AssistantActionPreviewIn,response:Response,s:Session=Depends(db),u:User=Depends(current_user)):
     if data.idempotency_key.startswith('chat:'):raise HTTPException(422,'This request-key prefix is reserved for chat proposals')
     return prepare_assistant_action(data,response,s,u)
 
-@app.post("/api/v1/assistant/actions/{action_id}/confirm")
+@app.post("/api/v1/assistant/actions/{action_id}/confirm",response_model=AssistantActionOut,response_model_exclude_unset=True)
 def confirm_assistant_action(action_id:str,s:Session=Depends(db),u:User=Depends(current_user)):
     enforce_rate_limit(s,"assistant_action_confirm_user",str(u.id),30,3600)
     if len(action_id)!=32:raise HTTPException(404,"Action preview not found")
@@ -1287,17 +1323,17 @@ def cancel_assistant_action(action_id:str,s:Session=Depends(db),u:User=Depends(c
     if action.status=="confirmed":raise HTTPException(409,"A confirmed action cannot be cancelled")
     if action.status=="pending":action.status="cancelled";s.commit()
 
-@app.get("/api/v1/learning")
+@app.get("/api/v1/learning",response_model=list[LessonOut],response_model_exclude_unset=True)
 def learning_catalogue(s:Session=Depends(db),u:User=Depends(current_user)):
     progress={p.lesson_slug:p for p in s.scalars(select(LessonProgress).where(LessonProgress.owner_id==u.id))}
     return [{**public_lesson(lesson),"progress":({"score":progress[lesson["slug"]].score,"completed_at":progress[lesson["slug"]].completed_at,"version":progress[lesson["slug"]].lesson_version} if lesson["slug"] in progress else None)} for lesson in LESSONS]
-@app.get("/api/v1/learning/{slug}")
+@app.get("/api/v1/learning/{slug}",response_model=LessonOut,response_model_exclude_unset=True)
 def learning_lesson(slug:str,detailed:bool=Query(default=False),s:Session=Depends(db),u:User=Depends(current_user)):
     lesson=LESSON_BY_SLUG.get(slug)
     if not lesson:raise HTTPException(404,"Lesson not found")
     progress=s.scalar(select(LessonProgress).where(LessonProgress.owner_id==u.id,LessonProgress.lesson_slug==slug))
     return {**public_lesson(lesson,detailed=detailed),"progress":({"score":progress.score,"completed_at":progress.completed_at,"version":progress.lesson_version} if progress else None)}
-@app.post("/api/v1/learning/{slug}/complete")
+@app.post("/api/v1/learning/{slug}/complete",response_model=LessonResultOut)
 def complete_lesson(slug:str,data:QuizSubmissionIn,s:Session=Depends(db),u:User=Depends(current_user)):
     lesson=LESSON_BY_SLUG.get(slug)
     if not lesson:raise HTTPException(404,"Lesson not found")
@@ -1310,7 +1346,7 @@ def complete_lesson(slug:str,data:QuizSubmissionIn,s:Session=Depends(db),u:User=
         progress.lesson_version=lesson["version"];progress.score=score;progress.completed_at=now
     s.commit()
     return {"lesson_slug":slug,"score":score,"total":1,"correct":score==1,"explanation":lesson["quiz"]["explanation"],"completed_at":now}
-@app.post("/api/v1/assistant")
+@app.post("/api/v1/assistant",response_model=AssistantReplyOut)
 def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depends(current_user)):
     c=s.scalar(select(Conversation).where(Conversation.id==data.conversation_id,Conversation.owner_id==u.id))
     if not c:raise HTTPException(404,"Conversation not found")
@@ -1355,7 +1391,7 @@ def assistant_chat(data:ChatIn,request:Request,s:Session=Depends(db),u:User=Depe
     if c.title=="New conversation":c.title=data.message[:110]
     c.updated_at=datetime.now(timezone.utc);s.commit()
     return {"conversation_id":c.id,"message":answer,"sources":citations,"already_processed":False}
-@app.post("/api/v1/water",status_code=201)
+@app.post("/api/v1/water",status_code=201,response_model=WaterOut)
 def water(ml:int=Query(gt=0,le=2000),s:Session=Depends(db),u:User=Depends(current_user)):
     s.execute(select(User.id).where(User.id==u.id).with_for_update()).scalar_one()
     e=Water(owner_id=u.id,ml=ml);s.add(e);s.commit();return {"id":e.id,"ml":e.ml}

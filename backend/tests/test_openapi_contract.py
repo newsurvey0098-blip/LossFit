@@ -44,3 +44,18 @@ def test_openapi_paths_include_generated_request_body_contracts():
     assert '"201": { content: { "application/json": components["schemas"]["AuthSessionOut"]' in generated
     assert '"201": { content: { "application/json": components["schemas"]["FoodOut"]' in generated
     assert '"201": { content: { "application/json": components["schemas"]["MealOut"]' in generated
+
+
+def test_every_json_success_response_has_a_declared_schema():
+    import json
+
+    schema = json.loads((ROOT / "backend" / "openapi.json").read_text(encoding="utf-8"))
+    missing = [
+        f"{method.upper()} {path} -> {status}"
+        for path, path_item in schema["paths"].items()
+        for method, operation in path_item.items()
+        for status, response in operation.get("responses", {}).items()
+        if status.startswith("2")
+        and response.get("content", {}).get("application/json", {}).get("schema") == {}
+    ]
+    assert missing == []
