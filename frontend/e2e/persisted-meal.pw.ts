@@ -410,6 +410,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Send message'}).click();
   await expect(page.getByRole('alert')).toContainText('Your message was not saved');
   await expect(composer).toHaveValue(outagePrompt);
+  await checkAccessibility(page,'assistant provider outage');
   await page.getByRole('button',{name:'Retry'}).click();
   await expect(page.locator('.bubble.user p').filter({hasText:outagePrompt})).toHaveCount(1);
   await expect(page.locator('.bubble.assistant p').filter({hasText:'This is a deterministic test response'})).toHaveCount(2);
