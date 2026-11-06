@@ -1,5 +1,9 @@
 # Implementation evidence
 
+- On 2026-11-07, audited every FastAPI `/api/v1` route and added a regression that requires the authenticated-user dependency on every route except the explicit public health/auth/reset/OAuth-callback endpoints. The targeted OpenAPI/security contract file passed 5/5. `scripts/test.ps1` created and migrated an empty disposable PostgreSQL database and the complete backend suite passed 110 tests with one local pgvector-only skip. Hosted run [42295315393](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42295315393) passed all four CI jobs. No production deployment was performed.
+
+- On 2026-11-07, confirmed Vercel Git integration created a protected preview for commit `68d4d02` even though `previewDeploymentsDisabled` was temporarily set. It reached `READY` with `target: null`; production remained on `fa13142`. The cancellation request failed after the preview became ready. Vercel's documented Ignored Build Step is now configured as `exit 0` on both connected projects to skip future Git builds while deployment is deferred. No production domain was changed.
+
 - On 2026-11-07, verified the Windows startup script with ports 5173 and 5174 already occupied. It selected `http://127.0.0.1:5175`, launched Vite with `--strictPort`, and Vite reported the same URL. Stopped only this verification server; the pre-existing listeners were left running. `scripts/start-dev.ps1` now prints the selected port and reports frontend exit failures instead of relying on Vite's silent fallback.
 
 - On 2026-11-07, updated the Windows preflight to discover LossFit's active Vite port from 5173-5193 using both the app shell and proxied readiness endpoint. `scripts/check-dev.ps1` passed against the running app at 5173: frontend HTTP 200, PostgreSQL connected, and migrations current. Both PowerShell scripts parse without syntax errors; setup instructions now direct users to the URL printed at startup.

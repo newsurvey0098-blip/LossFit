@@ -8,13 +8,13 @@ The repository is `newsurvey0098-blip/LossFit`; use the local Git remote `origin
 2. Run the phase's targeted checks, plus the relevant local acceptance checks. Do not state that a live integration or deployment was verified unless it was exercised.
 3. Update the acceptance evidence, run `git diff --check`, and commit the complete change.
 4. Push the implementation branch with `git push origin codex/lossfit-verification`. GitHub Actions runs CI for this branch. Verify the run result before reporting the milestone as hosted-verified.
-5. Check Vercel deployment history. During local implementation, preview deployments have been temporarily disabled for both connected LossFit projects only around branch pushes, then restored. Confirm no branch deployment was created. Do not promote, deploy to Production, or change production domains while deployment remains deferred.
+5. Check Vercel deployment history. Git integration automatically attempted previews for non-production branch pushes; toggling `previewDeploymentsDisabled` alone did not stop one. Both projects now use the Ignored Build Step command `exit 0`, which skips Git builds/deployments until local acceptance is complete. Keep this setting in place during implementation pushes. When deployment is explicitly resumed, replace it with the intended build gate (a command exiting `1` proceeds) and verify which projects and environments will build before pushing. Do not promote, deploy to Production, or change production domains while deployment remains deferred.
 
 The repository is public. Commit source and safe environment templates only; never add `.env` files, credentials, local databases, runtime files, uploads, test artifacts, or the reference ZIP and screenshots. The current Vercel production API is not ready: production database migrations and runtime credentials remain unconfigured. See [Vercel deployment status](vercel-deployment.md) before resuming deployment.
 
 ## Current remote state
 
 - Active branch: `codex/lossfit-verification`.
-- Latest verified code milestone: commit `e4c1076` (Windows development server port selection), with hosted CI run [42293832637](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42293832637) passing all four jobs.
+- Latest verified code milestone: commit `68d4d02` (authenticated-route regression), with hosted CI run [42295315393](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42295315393) passing all four jobs.
 - Latest evidence commit: `65f70d6`, with hosted CI run [42292683632](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42292683632) passing all four jobs.
-- Vercel Production deployment remains at baseline commit `fa13142`; no new deployment was created for these verification-branch pushes.
+- Vercel Production remains at baseline commit `fa13142`. Push `68d4d02` unexpectedly produced protected preview `dpl_8z1imaiDFPUSAuVffaDuX8Tqnh7G` (`target: null`); production was not changed. The Ignored Build Step now skips subsequent Git builds while deployment remains deferred.
