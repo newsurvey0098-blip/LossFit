@@ -12,8 +12,8 @@ Updated 2026-11-06. LossFit is not deployed to Vercel. `vercel.json` now describ
 
 ## Vercel access and production resources
 
-- The connected Vercel account previously returned `403 Not authorized` for its default team. A temporary access-approval URL was generated, but it expires; request a fresh one through the connected Vercel integration when the owner is ready to approve it. GitHub collaborator access does not grant Vercel team access.
-- A new, empty Supabase PostgreSQL project named `lossfit-production` was provisioned in `ap-south-1` on 2026-11-06. Its public schema has no application tables. The app still points to the local development database.
+- The connected Vercel account returns `403 Not authorized` for its default team. A single-use team-access approval URL was generated on 2026-11-06 and must be opened and approved by the owner before project APIs can be called. GitHub collaborator access does not grant Vercel team access.
+- Supabase project `lossfit-production` (`gwvmbkjuggacwnckrwow`) is `ACTIVE_HEALTHY` in `ap-south-1`, running PostgreSQL 17.11.0.018. A read-only inspection on 2026-11-06 found no public tables, no migration history, and no health or security advisor findings. It remains an empty provisioned database; production credentials, a least-privilege runtime role, and remote migrations are not configured. The app still points to the local development database.
 - Local AI, Google OAuth, and SMTP credentials are empty. Those integrations are unavailable until production credentials are set and live flows are verified.
 
 ## Required before preview deployment
