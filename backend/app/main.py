@@ -53,6 +53,9 @@ class AuthSession(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id",ondelete="CASCADE"),index=True)
     refresh_token_hash: Mapped[str] = mapped_column(String(64),unique=True,index=True)
+    retry_token_hash: Mapped[str|None] = mapped_column(String(64),nullable=True,index=True)
+    retry_until: Mapped[datetime|None] = mapped_column(DateTime(timezone=True),nullable=True)
+    retry_current_token: Mapped[str|None] = mapped_column(Text,nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True),nullable=True)
@@ -359,6 +362,10 @@ def oauth_secret_box()->Fernet:
     key=base64.urlsafe_b64encode(hashlib.sha256(("lossfit-google-oauth:"+JWT_SECRET).encode()).digest())
     return Fernet(key)
 
+def refresh_recovery_box()->Fernet:
+    key=base64.urlsafe_b64encode(hashlib.sha256(("lossfit-refresh-recovery:"+JWT_SECRET).encode()).digest())
+    return Fernet(key)
+
 def verify_google_id_token(raw_token:str, audience:str)->dict:
     from google.auth.transport.requests import Request as GoogleRequest
     from google.oauth2 import id_token
@@ -444,14 +451,26 @@ def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)
     enforce_rate_limit(s,"refresh_ip",request_ip(request),120,900)
     raw=request.cookies.get("lf_refresh")
     if not raw:raise HTTPException(401,"Sign in again")
-    session=s.scalar(select(AuthSession).where(AuthSession.refresh_token_hash==token_hash(raw)).with_for_update())
     now=datetime.now(timezone.utc)
+    digest=token_hash(raw)
+    session=s.scalar(select(AuthSession).where(AuthSession.refresh_token_hash==digest).with_for_update())
+    if not session:
+        replay=s.scalar(select(AuthSession).where(AuthSession.retry_token_hash==digest,AuthSession.retry_until>now).with_for_update())
+        if replay and not replay.revoked_at and replay.expires_at>now and replay.retry_current_token:
+            try:current=refresh_recovery_box().decrypt(replay.retry_current_token.encode()).decode()
+            except Exception:
+                response.delete_cookie("lf_refresh",path="/api/v1/auth")
+                raise HTTPException(401,"Sign in again")
+            user=s.get(User,replay.user_id)
+            if not user:raise HTTPException(401,"Sign in again")
+            set_auth_cookies(response,current)
+            return {"access_token":token(user,replay.id)}
     if not session or session.revoked_at or session.expires_at<=now:
         response.delete_cookie("lf_refresh",path="/api/v1/auth")
         raise HTTPException(401,"Sign in again")
     user=s.get(User,session.user_id)
     if not user:raise HTTPException(401,"Sign in again")
-    new_raw=secrets.token_urlsafe(48);session.refresh_token_hash=token_hash(new_raw);session.expires_at=now+timedelta(days=30);s.commit();set_auth_cookies(response,new_raw)
+    new_raw=secrets.token_urlsafe(48);session.retry_token_hash=session.refresh_token_hash;session.retry_until=now+timedelta(seconds=30);session.retry_current_token=refresh_recovery_box().encrypt(new_raw.encode()).decode();session.refresh_token_hash=token_hash(new_raw);session.expires_at=now+timedelta(days=30);s.commit();set_auth_cookies(response,new_raw)
     return {"access_token":token(user,session.id)}
 @app.post("/api/v1/auth/forgot-password")
 def forgot_password(data:ForgotPasswordIn,request:Request,s:Session=Depends(db)):

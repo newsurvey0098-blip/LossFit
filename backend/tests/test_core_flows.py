@@ -119,6 +119,28 @@ def test_cookie_mutations_require_csrf_and_origin():
         good=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":csrf})
         assert good.status_code==200 and good.json()['access_token']
 
+def test_refresh_rotation_recovers_an_interrupted_response_once_and_rejects_late_replay():
+    with TestClient(app) as client:
+        register(client)
+        domain='testserver.local';original=client.cookies.get('lf_refresh',path='/api/v1/auth',domain=domain);csrf=client.cookies.get('lf_csrf',path='/',domain=domain);headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
+        rotated=client.post('/api/v1/auth/refresh',headers=headers)
+        assert rotated.status_code==200
+        current=client.cookies.get('lf_refresh',path='/api/v1/auth',domain=domain);assert current!=original
+        client.cookies.set('lf_refresh',original,path='/api/v1/auth',domain=domain)
+        replay=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies.get('lf_csrf',path='/',domain=domain)})
+        assert replay.status_code==200 and client.cookies.get('lf_refresh',path='/api/v1/auth',domain=domain)==current
+        client.cookies.set('lf_refresh',original,path='/api/v1/auth',domain=domain)
+        replay_again=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies.get('lf_csrf',path='/',domain=domain)})
+        assert replay_again.status_code==200 and client.cookies.get('lf_refresh',path='/api/v1/auth',domain=domain)==current
+        with main.SessionLocal() as s:
+            session=s.scalar(main.select(main.AuthSession).where(main.AuthSession.refresh_token_hash==main.token_hash(current)))
+            session.retry_until=datetime.now(timezone.utc)-timedelta(seconds=1);s.commit()
+        client.cookies.set('lf_refresh',original,path='/api/v1/auth',domain=domain)
+        late=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies.get('lf_csrf',path='/',domain=domain)})
+        assert late.status_code==401
+        client.cookies.set('lf_refresh',current,path='/api/v1/auth',domain=domain)
+        assert client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies.get('lf_csrf',path='/',domain=domain)}).status_code==200
+
 def test_production_cookie_flags_and_restricted_paths(monkeypatch):
     monkeypatch.setenv('ENVIRONMENT','production')
     with TestClient(app,base_url='https://testserver') as client:
@@ -568,7 +590,8 @@ def test_refresh_rotates_tokens_and_logout_revokes_current_session():
         assert client.get('/api/v1/auth/me').status_code==200
         client.cookies.set('lf_refresh',old_refresh,path='/api/v1/auth')
         reused=client.post('/api/v1/auth/refresh',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf})
-        assert reused.status_code==401
+        assert reused.status_code==200
+        new_csrf=client.cookies['lf_csrf']
         client.cookies.set('lf_refresh',new_refresh,path='/api/v1/auth')
         logout=client.post('/api/v1/auth/logout',headers={"origin":"http://localhost:5173","x-csrf-token":new_csrf})
         assert logout.status_code==204
