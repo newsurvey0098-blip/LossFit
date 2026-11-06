@@ -1,9 +1,17 @@
+import type {operations} from './api-types';
+
 const base='/api/v1';
 let accessToken:string|null=null;
 let refreshFlight:Promise<string|null>|null=null;
 
 export function setAccessToken(token:string|null){accessToken=token;}
 export function getAccessToken(){return accessToken;}
+
+export type JsonBody<Operation extends keyof operations> = operations[Operation] extends {requestBody:{content:{'application/json':infer Body}}}?Body:never;
+export function jsonBody<Operation extends keyof operations>(operation:Operation,body:JsonBody<Operation>):string{
+ void operation;
+ return JSON.stringify(body);
+}
 
 export async function responseError(response:Response):Promise<Error>{
  const body:unknown=await response.json().catch(()=>null);

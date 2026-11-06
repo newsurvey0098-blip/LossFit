@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { api } from './api';
+import { api, jsonBody } from './api';
 
 type Item = {
   food_id?: number;
@@ -81,7 +81,7 @@ export function NewMealPage() {
     if (!items.length) { setError('Add at least one food to this meal.'); return; }
     setBusy(true);
     try {
-      const meal = await api<{id:number}>('/meals', { method: 'POST', body: JSON.stringify({ name, meal_type: mealType, items }) });
+      const meal = await api<{id:number}>('/meals', { method: 'POST', body: jsonBody('add_meal_api_v1_meals_post', { name, meal_type: mealType, items }) });
       navigate(`/meals/${meal.id}`);
     } catch (e: any) { setError(e.message); setBusy(false); }
   }
