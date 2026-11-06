@@ -457,7 +457,7 @@ def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)
     if not session:
         replay=s.scalar(select(AuthSession).where(AuthSession.retry_token_hash==digest,AuthSession.retry_until>now).with_for_update())
         if replay and not replay.revoked_at and replay.expires_at>now and replay.retry_current_token:
-            try:current=refresh_recovery_box().decrypt(replay.retry_current_token.encode()).decode()
+            try:current=refresh_recovery_box().decrypt(replay.retry_current_token.encode(),ttl=30).decode()
             except Exception:
                 response.delete_cookie("lf_refresh",path="/api/v1/auth")
                 raise HTTPException(401,"Sign in again")
