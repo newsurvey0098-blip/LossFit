@@ -1,7 +1,8 @@
 import pytest
 from sqlalchemy.dialects.postgresql import dialect as postgres_dialect
 
-from backend.app.knowledge import _vector_literal, pgvector_candidate_scores
+from backend.app import main
+from backend.app.knowledge import _vector_literal, pgvector_candidate_scores, pgvector_extension_schema, store_pgvector_embeddings
 
 
 class Result:
@@ -64,3 +65,32 @@ def test_pgvector_query_falls_back_when_extension_is_not_installed():
 
     assert pgvector_candidate_scores(session, "model-v1", [1, 0], limit=8) is None
     assert len(session.statements) == 1
+
+
+def test_pgvector_database_round_trip_when_extension_is_available():
+    from uuid import uuid4
+
+    with main.SessionLocal() as session:
+        if not pgvector_extension_schema(session):
+            pytest.skip("pgvector is not installed in this PostgreSQL instance")
+
+        source = main.KnowledgeSource(
+            source_key=f"pgvector-test-{uuid4().hex}", version=1,
+            title="pgvector integration fixture", organization="LossFit CI",
+            url="https://example.test/pgvector-fixture", content_hash="a" * 64,
+        )
+        session.add(source)
+        session.flush()
+        chunk = main.KnowledgeChunk(
+            source_id=source.id, chunk_index=0, content="cosine retrieval fixture",
+            embedding=[1.0, 0.0, 0.0], embedding_model="pgvector-test-model",
+        )
+        session.add(chunk)
+        session.flush()
+
+        assert store_pgvector_embeddings(session, [(chunk.id, "pgvector-test-model", [1.0, 0.0, 0.0])])
+        scores = pgvector_candidate_scores(session, "pgvector-test-model", [1.0, 0.0, 0.0], limit=8)
+        assert scores is not None
+        assert scores[chunk.id] == pytest.approx(1.0)
+
+        session.rollback()

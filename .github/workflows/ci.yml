@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:0.8.7-pg16
         env:
           POSTGRES_USER: lossfit
           POSTGRES_PASSWORD: lossfit-ci-only
@@ -60,7 +60,10 @@ jobs:
       - run: python -m pip install -r backend/requirements.txt
       - run: python scripts/check-vercel-config.py
       - run: python scripts/generate-api-types.py --check
+      - run: python -m alembic -c backend/alembic.ini upgrade b8c4f97a61d2
+      - run: python scripts/pgvector-migration-check.py seed
       - run: python -m alembic -c backend/alembic.ini upgrade head
+      - run: python scripts/pgvector-migration-check.py verify
       - run: python -m pytest -q backend/tests
 
   frontend:
