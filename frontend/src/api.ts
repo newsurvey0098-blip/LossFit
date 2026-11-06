@@ -29,9 +29,16 @@ async function refreshToken():Promise<string|null>{
  if(refreshFlight)return refreshFlight;
  refreshFlight=(async()=>{
   try{
-   const response=await fetch(`${base}/auth/refresh`,{method:'POST',credentials:'include',headers:csrfHeaders()});
-   if(!response.ok){accessToken=null;return null;}
-   const result=await response.json();accessToken=result.access_token;return accessToken;
+   const rotate=async()=>{
+    const response=await fetch(`${base}/auth/refresh`,{method:'POST',credentials:'include',headers:csrfHeaders()});
+    if(!response.ok){accessToken=null;return null;}
+    const result=await response.json();accessToken=result.access_token;return accessToken;
+   };
+   // The in-module promise coalesces requests in one document. A Web Lock also
+   // serializes rotations across reloads and same-origin tabs, where separate
+   // JS contexts otherwise could replay the same single-use refresh cookie.
+   if(navigator.locks?.request)return await navigator.locks.request('lossfit-refresh-token',rotate);
+   return await rotate();
   }catch{accessToken=null;return null;}
   finally{refreshFlight=null;}
  })();

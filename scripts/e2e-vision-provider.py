@@ -32,9 +32,21 @@ class Handler(BaseHTTPRequestHandler):
         messages = body["messages"]
         content = messages[-1]["content"]
         has_image = isinstance(content, list) and any(item.get("type") == "image_url" for item in content if isinstance(item, dict))
-        user_text = " ".join(message.get("content", "") for message in messages if message.get("role") == "user" and isinstance(message.get("content"), str)).casefold()
+        user_parts = []
+        for message in messages:
+            if message.get("role") != "user":
+                continue
+            content = message.get("content", "")
+            if isinstance(content, str):
+                user_parts.append(content)
+            elif isinstance(content, list):
+                user_parts.extend(item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text")
+        user_text = " ".join(user_parts).casefold()
         if "log 250 ml of water" in user_text:
             message = {"tool_calls": [{"id": "call-local-water", "type": "function", "function": {"name": "propose_water", "arguments": '{"water_ml":250}'}}]}
+        elif has_image and "nutrition facts panel" in user_text:
+            answer = json.dumps({"name": "Browser label granola", "brand": "Test", "serving_label": "1 bar", "serving_grams": 125, "basis": "per_serving", "kcal": 100, "protein": 8, "carbs": 12, "fat": None})
+            message = {"content": answer}
         elif has_image:
             answer = json.dumps({"items": [{"name": "Browser test oatmeal", "grams": 150}]})
             message = {"content": answer}

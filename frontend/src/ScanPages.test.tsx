@@ -3,8 +3,8 @@ import React from 'react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {MemoryRouter,Route,Routes} from 'react-router-dom';
-import {ScannerPage,ScannerReviewPage} from './ScanPages';
-import {api,authenticatedFetch} from './api';
+import {NutritionLabelPage,ScannerPage,ScannerReviewPage} from './ScanPages';
+import {api,authenticatedFetch,upload} from './api';
 vi.mock('./api',()=>({api:vi.fn(),authenticatedFetch:vi.fn(),upload:vi.fn()}));
 beforeEach(()=>{vi.resetAllMocks();URL.createObjectURL=vi.fn(()=> 'blob:private-photo');URL.revokeObjectURL=vi.fn()});
 afterEach(cleanup);
@@ -31,4 +31,21 @@ it('searches beyond initial foods and preserves a selected match through later s
  await waitFor(()=>expect(api).toHaveBeenCalledWith('/foods?q=another'));
  expect((screen.getByLabelText('Match a catalogue food') as HTMLSelectElement).value).toBe('90');
  expect((screen.getByRole('button',{name:'Add reviewed meal'}) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it('reviews and edits AI label extraction before saving per-serving values',async()=>{
+ vi.mocked(api).mockImplementation(async(path)=>path==='/labels/status'?{available:true}:path==='/foods/from-label'?{id:42}:{});
+ vi.mocked(upload).mockResolvedValue({name:'Browser label granola',brand:'Test',serving_label:'1 bar',serving_grams:125,basis:'per_serving',kcal:100,protein:8,carbs:12,fat:null});
+ render(<MemoryRouter><NutritionLabelPage/></MemoryRouter>);
+ const image=new File([new Uint8Array([1,2,3])],'label.png',{type:'image/png'});
+ fireEvent.change(screen.getByLabelText('Package label photo'),{target:{files:[image]}});
+ fireEvent.click(await screen.findByRole('button',{name:'Read label with AI'}));
+ await screen.findByDisplayValue('Browser label granola');
+ expect((screen.getByLabelText('Calories (kcal)') as HTMLInputElement).value).toBe('100');
+ expect((screen.getByLabelText('Fat (g)') as HTMLInputElement).value).toBe('');
+ fireEvent.change(screen.getByLabelText('Calories (kcal)'),{target:{value:'125'}});
+ fireEvent.click(screen.getByRole('button',{name:'Save reviewed label food'}));
+ await waitFor(()=>expect(api).toHaveBeenCalledWith('/foods/from-label',expect.objectContaining({method:'POST'})));
+ const payload=JSON.parse(vi.mocked(api).mock.calls.find(([path])=>path==='/foods/from-label')![1]!.body as string);
+ expect(payload).toMatchObject({name:'Browser label granola',brand:'Test',serving_grams:125,basis:'per_serving',kcal:125,protein:8,carbs:12,fat:null});
 });

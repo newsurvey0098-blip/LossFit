@@ -15,6 +15,16 @@ it('uses the same readable error handling for uploads',async()=>{
  await expect(upload('/scans',new FormData())).rejects.toThrow('Image exceeds the permitted dimensions');
 });
 
+it('serializes refresh-token rotation with the browser-wide lock',async()=>{
+ const lockRequest=vi.fn(async(_name:string,callback:()=>Promise<string|null>)=>callback());
+ vi.stubGlobal('navigator',{locks:{request:lockRequest}});
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>String(input).endsWith('/auth/refresh')
+  ?new Response(JSON.stringify({access_token:'fresh-access'}),{status:200})
+  :new Response(JSON.stringify({user:'ok'}),{status:200})));
+ await expect(api('/auth/me')).resolves.toEqual({user:'ok'});
+ expect(lockRequest).toHaveBeenCalledWith('lossfit-refresh-token',expect.any(Function));
+});
+
 it('handles non-JSON outages and unexpected detail objects without displaying raw response bodies',async()=>{
  const outage=await responseError(new Response('upstream internal diagnostics',{status:502}));
  expect(outage.message).toBe('Request failed (502). Please try again.');
