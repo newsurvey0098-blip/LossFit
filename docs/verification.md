@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- On 2026-11-07, pinned every GitHub Action in CI and the gated production-migration workflow to immutable commit SHAs. Verified each SHA against its upstream release tag with `git ls-remote`, then reran `actionlint` v1.7.12 on both workflow files; both passed. `git diff --check` passed. The hosted pgvector migration job still awaits a push, and no Vercel deployment was made.
+
 - On 2026-11-07, validated the updated GitHub Actions workflow with `actionlint` v1.7.12. Downloaded the official Windows release archive to the temporary directory, verified its SHA-256 against the release checksums, and ran it against `.github/workflows/ci.yml` with no findings. The hosted pgvector migration job remains unrun until a push; no push or deployment was performed.
 
 - On 2026-11-06, added a dedicated hosted PostgreSQL 16 CI path using the official version-pinned `pgvector/pgvector:0.8.7-pg16` image. CI seeds a knowledge embedding before the optional migration, then verifies migration backfill and cosine retrieval; backend tests also run a real sidecar round trip when the extension is present. The local full backend run passed 106 tests with the pgvector integration test skipped because this machine has no extension or container/build toolchain. Python compilation and `git diff --check` passed. Hosted CI cannot run until the branch is pushed; no push or deployment was performed.
