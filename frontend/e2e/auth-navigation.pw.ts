@@ -1,7 +1,7 @@
 import {expect,test} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-test('signed-out users can sign in to the requested private page at mobile and desktop sizes',async({page})=>{
+test('signed-out users can sign in to the requested private page at mobile and desktop sizes',async({page},info)=>{
     await page.setViewportSize({width:390,height:844});
     await page.route('**/api/v1/auth/refresh',route=>route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({detail:'Please sign in'})}));
     await page.route('**/api/v1/auth/login',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:'browser-test-token',id:7,name:'Lena',email:'lena@example.test',goals:{calories:2000,protein:120,carbs:220,fat:70},profile:{age:30}})}));
@@ -14,6 +14,10 @@ test('signed-out users can sign in to the requested private page at mobile and d
 
     await page.goto('/foods');
     await expect(page.getByRole('heading',{name:'Welcome back'})).toBeVisible();
+    await page.screenshot({path:info.outputPath('login-390.png'),fullPage:true});
+    await page.setViewportSize({width:1440,height:900});
+    await page.screenshot({path:info.outputPath('login-1440.png'),fullPage:true});
+    await page.setViewportSize({width:390,height:844});
     expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
     await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCount(0);
     await page.getByLabel('Email').fill('lena@example.test');

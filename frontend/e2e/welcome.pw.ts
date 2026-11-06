@@ -21,13 +21,17 @@ test('welcome content reflows and account links work with reduced motion',async(
  await expect(page.getByRole('heading',{name:'Create your account'})).toBeVisible();
 });
 
-test('branded startup waits for the real session check without motion or an artificial delay',async({page})=>{
+test('branded startup waits for the real session check without motion or an artificial delay',async({page},info)=>{
  let release!:()=>void;
  await page.route('**/api/v1/auth/refresh',route=>new Promise<void>(resolve=>{release=()=>{void route.fulfill({status:401,contentType:'application/json',body:'{}'}).then(resolve)}}));
  await page.route('**/api/v1/auth/me',route=>route.fulfill({status:401,contentType:'application/json',body:'{}'}));
  await page.goto('/home');
  await expect(page.getByRole('status')).toHaveText('Checking your session…');
  expect(await page.locator('.bootstrap-mark').evaluate(element=>getComputedStyle(element).animationName)).toBe('none');
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:info.outputPath('app-bootstrap-390.png'),fullPage:true});
+ await page.setViewportSize({width:1440,height:900});
+ await page.screenshot({path:info.outputPath('app-bootstrap-1440.png'),fullPage:true});
  release();
  await expect(page.getByRole('heading',{name:'Welcome back'})).toBeVisible();
 });
