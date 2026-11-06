@@ -1,6 +1,6 @@
 # Implementation evidence
 
-- On 2026-11-06, tightened `/api/v1/health/ready`: it now compares the database's applied Alembic heads with the packaged migration heads and returns 503 when the schema is absent or behind. The fresh isolated PostgreSQL suite passed 88/88, including current and stale-revision readiness cases; frontend tests passed 22/22, the production build succeeded, and all six local Chromium workflows passed on a fresh migrated database. Hosted CI verification is pending for this checkpoint.
+- On 2026-11-06, tightened `/api/v1/health/ready`: it now compares the database's applied Alembic heads with the packaged migration heads and returns 503 when the schema is absent or behind. The fresh isolated PostgreSQL suite passed 88/88, including current and stale-revision readiness cases; frontend tests passed 22/22, the production build succeeded, and all six local Chromium workflows passed on a fresh migrated database. GitHub Actions run [42190946173](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42190946173) passed all three hosted jobs.
 
 - On 2026-11-06, added `scripts/check-vercel-config.py` to CI to reject drift in the Services roots, FastAPI ASGI entrypoint, `/api/*` backend rewrite, and Vite SPA deep-link fallback. The local manifest check passed. This static contract check does not replace the account-level Vercel validator or a live deployment.
 
