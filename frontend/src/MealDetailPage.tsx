@@ -274,7 +274,7 @@ export default function MealDetailPage() {
           <p className="muted">{item.per100?.kcal == null ? 'Calories unknown' : `${(item.per100.kcal * item.grams / 100).toFixed(0)} kcal`} · {item.per100?.protein == null ? 'Protein unknown' : `${(item.per100.protein * item.grams / 100).toFixed(1)}g protein`} · {item.verification?.replace('_', ' ') ?? 'nutrition snapshot'}</p>
           {item.source && <small className="muted">Source: {item.source}</small>}
         </div>
-        <button className="button" aria-label={`Remove ${item.name || item.food || 'food'}`} onClick={() => removeItem(index)}>Remove</button>
+        <button type="button" className="button" aria-label={`Remove ${item.name || item.food || 'food'}`} onClick={() => removeItem(index)}>Remove</button>
       </article>)}
       <button ref={addFoodButton} className="button" type="button" onClick={() => { setPicker((value) => !value); setPicked(null); setError(''); }}><Search size={16} /> Add food to this meal</button>
       {picker && <section className="food-picker" aria-label="Add food picker">
@@ -294,7 +294,7 @@ export default function MealDetailPage() {
       <div className="nutrients large"><span><b>{nutrient('kcal')}</b> kcal</span><span><b>{nutrient('protein')}</b> protein</span><span><b>{nutrient('carbs')}</b> carbs</span><span><b>{nutrient('fat')}</b> fat</span></div>
       {error && <p className="error" role="alert">{error}</p>}
       {saved && <p role="status" className="success">Meal changes saved.</p>}
-      <div className="actions"><button className="button primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button><button className="button danger" onClick={remove} disabled={busy}>Delete meal</button><Link className="button" to="/foods">Open foods</Link></div>
+      <div className="actions"><button type="button" className="button primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button><button type="button" className="button danger" onClick={remove} disabled={busy}>Delete meal</button><Link className="button" to="/foods">Open foods</Link></div>
     </section>
   </>;
 }

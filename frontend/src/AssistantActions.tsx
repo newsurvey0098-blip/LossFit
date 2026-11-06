@@ -227,15 +227,15 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
             )}
           </div>
           <div className="actions">
-            <button className="button primary" onClick={() => void confirm()} disabled={busy}>{busy ? 'Saving…' : 'Confirm log'}</button>
-            <button className="button" onClick={() => void cancel()} disabled={busy}>Cancel</button>
+            <button type="button" className="button primary" onClick={() => void confirm()} disabled={busy}>{busy ? 'Saving…' : 'Confirm log'}</button>
+            <button type="button" className="button" onClick={() => void cancel()} disabled={busy}>Cancel</button>
           </div>
         </div>
       ) : (
         <>
           <div className="action-kind" role="group" aria-label="Choose an assistant action">
-            <button className={`chip ${kind === 'log_water' ? 'selected' : ''}`} aria-pressed={kind === 'log_water'} onClick={() => setKind('log_water')}>Log water</button>
-            <button className={`chip ${kind === 'log_meal' ? 'selected' : ''}`} aria-pressed={kind === 'log_meal'} onClick={() => setKind('log_meal')}>Log a meal</button>
+            <button type="button" className={`chip ${kind === 'log_water' ? 'selected' : ''}`} aria-pressed={kind === 'log_water'} onClick={() => setKind('log_water')}>Log water</button>
+            <button type="button" className={`chip ${kind === 'log_meal' ? 'selected' : ''}`} aria-pressed={kind === 'log_meal'} onClick={() => setKind('log_meal')}>Log a meal</button>
           </div>
           {kind === 'log_water' ? (
             <form className="water-action-form" onSubmit={createPreview}>

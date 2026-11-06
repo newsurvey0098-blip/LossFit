@@ -29,23 +29,22 @@ function lineAt(source, node) {
 }
 
 describe('source-level interactive UI invariants', () => {
-  it('declares button intent for click handlers inside forms', () => {
+  it('declares button intent for every click handler', () => {
     const violations = [];
 
     for (const file of sourceFiles(sourceDirectory)) {
       const ast = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
-      function visit(node, formDepth = 0) {
-        const isForm = ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'form';
-        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'button' && formDepth > 0) {
+      function visit(node) {
+        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'button') {
           const attributes = node.openingElement.attributes.properties;
           const hasClickHandler = attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(ast) === 'onClick');
           const hasExplicitType = attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(ast) === 'type');
           if (hasClickHandler && !hasExplicitType) {
-            violations.push(`${path.relative(sourceDirectory, file)}:${lineAt(ast, node)} has a clickable form button without an explicit type`);
+            violations.push(`${path.relative(sourceDirectory, file)}:${lineAt(ast, node)} has a click-handled button without an explicit type`);
           }
         }
-        ts.forEachChild(node, (child) => visit(child, formDepth + (isForm ? 1 : 0)));
+        ts.forEachChild(node, visit);
       }
 
       visit(ast);

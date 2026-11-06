@@ -51,6 +51,6 @@ export default function ReminderNotice() {
   const label = notice.slot[0].toUpperCase() + notice.slot.slice(1);
   return <section className="reminder-notice" role="status" aria-label="Meal reminder">
     <p><strong>It’s time for {label.toLowerCase()}.</strong> Your meal reminder is set for today.</p>
-    <div className="actions"><Link className="button primary" to="/meals/new">Log a meal</Link><button className="button" onClick={() => setNotice(null)}>Dismiss</button></div>
+    <div className="actions"><Link className="button primary" to="/meals/new">Log a meal</Link><button type="button" className="button" onClick={() => setNotice(null)}>Dismiss</button></div>
   </section>;
 }

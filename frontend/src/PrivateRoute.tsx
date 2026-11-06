@@ -18,7 +18,7 @@ export default function PrivateRoute() {
   },[]);
   React.useEffect(()=>{void verify();},[verify]);
   if(state==='checking')return <AppBootstrapScreen/>;
-  if(state==='error')return <main id="main-content" tabIndex={-1}><section className="card simple"><h1>Can’t verify your session</h1><p role="alert" className="error">{error}</p><button className="button primary" onClick={()=>void verify()}>Try again</button></section></main>;
+  if(state==='error')return <main id="main-content" tabIndex={-1}><section className="card simple"><h1>Can’t verify your session</h1><p role="alert" className="error">{error}</p><button type="button" className="button primary" onClick={()=>void verify()}>Try again</button></section></main>;
   if(state==='signed-out')return <Navigate to="/login" replace state={{from:location.pathname}}/>;
   return <Outlet/>;
 }
