@@ -15,6 +15,6 @@ The repository is public. Commit source and safe environment templates only; nev
 ## Current remote state
 
 - Active branch: `codex/lossfit-verification`.
-- Latest verified code milestone: commit `68d4d02` (authenticated-route regression), with hosted CI run [42295315393](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42295315393) passing all four jobs.
-- Latest evidence commit: `65f70d6`, with hosted CI run [42292683632](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42292683632) passing all four jobs.
-- Vercel Production remains at baseline commit `fa13142`. Push `68d4d02` unexpectedly produced protected preview `dpl_8z1imaiDFPUSAuVffaDuX8Tqnh7G` (`target: null`); production was not changed. The Ignored Build Step now skips subsequent Git builds while deployment remains deferred.
+- Latest verified code milestone: commit `c9326d6` (automated Windows local-server port fallback), with hosted CI run [42296901145](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42296901145) passing all five jobs, including the Windows startup-script regression.
+- Latest evidence commit: `b2e9784`, with hosted CI run [42296086101](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42296086101) passing all four jobs.
+- Vercel Production remains at baseline commit `fa13142`. Push `68d4d02` unexpectedly produced protected preview `dpl_8z1imaiDFPUSAuVffaDuX8Tqnh7G` (`target: null`); production was not changed. The Ignored Build Step skipped the later `c9326d6` push, producing no additional branch preview.
