@@ -11,6 +11,7 @@
     "test:e2e:local": "powershell.exe -ExecutionPolicy Bypass -File ../scripts/e2e-local.ps1"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
     "@tanstack/react-query": "^5.0.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

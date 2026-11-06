@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { Activity, ArrowRight, CircleUserRound, Flame, Home, Plus, Sparkles, Utensils, Droplets, ChevronRight } from 'lucide-react';
+import '@fontsource-variable/geist';
 import './style.css';
 import AuthPage from './AuthPage';
 import { api } from './api';
