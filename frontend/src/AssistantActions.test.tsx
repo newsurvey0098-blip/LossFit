@@ -32,29 +32,36 @@ describe('assistant action confirmation',()=>{
   expect(confirmInit.method).toBe('POST');
  });
 
- it('shows server-calculated meal nutrition and waits for confirmation',async()=>{
+ it('previews and confirms a multi-food meal with server-calculated nutrition',async()=>{
   fetchMock.mockImplementation(async(input:RequestInfo|URL,init?:RequestInit)=>{
    const path=String(input);
+   if(path.includes('/foods?q=')&&path.includes('spinach'))return jsonResponse([{id:85,name:'Spinach, raw',state:'raw',kcal:23,protein:2.9,carbs:3.6,fat:0.4,verification:'reviewed'}]);
    if(path.includes('/foods?q='))return jsonResponse([{id:84,name:'Brown rice, cooked',state:'cooked',kcal:123,protein:2.7,carbs:25.6,fat:1,verification:'reviewed'}]);
-   if(path.endsWith('/assistant/actions/preview'))return jsonResponse({id:'meal-action-12345678901234567890',action:'log_meal',status:'pending',preview:{name:'Lunch',meal_type:'lunch',eaten_at:'2026-11-06T10:00:00+00:00',items:[{name:'Brown rice, cooked',state:'cooked',grams:150,per100:{kcal:123,protein:2.7,carbs:25.6,fat:1},verification:'reviewed',source:'USDA'}],totals:{kcal:184.5,protein:4.05,carbs:38.4,fat:1.5}},result:null});
-   if(path.endsWith('/assistant/actions/meal-action-12345678901234567890/confirm'))return jsonResponse({id:'meal-action-12345678901234567890',action:'log_meal',status:'confirmed',preview:{name:'Lunch',items:[],totals:{kcal:184.5}},result:{meal_id:19,name:'Lunch',kcal:184.5}});
+   if(path.endsWith('/assistant/actions/preview'))return jsonResponse({id:'meal-action-12345678901234567890',action:'log_meal',status:'pending',preview:{name:'Lunch',meal_type:'lunch',eaten_at:'2026-11-06T10:00:00+00:00',items:[{name:'Brown rice, cooked',state:'cooked',grams:150,per100:{kcal:123,protein:2.7,carbs:25.6,fat:1},verification:'reviewed',source:'USDA'},{name:'Spinach, raw',state:'raw',grams:50,per100:{kcal:23,protein:2.9,carbs:3.6,fat:0.4},verification:'reviewed',source:'USDA'}],totals:{kcal:196,protein:5.5,carbs:40.2,fat:1.7}},result:null});
+   if(path.endsWith('/assistant/actions/meal-action-12345678901234567890/confirm'))return jsonResponse({id:'meal-action-12345678901234567890',action:'log_meal',status:'confirmed',preview:{name:'Lunch',items:[],totals:{kcal:196}},result:{meal_id:19,name:'Lunch',kcal:196}});
    throw new Error(`Unexpected fetch ${path} ${init?.method??'GET'}`);
   });
   const user=userEvent.setup();render(<AssistantActionPanel conversationId={12}/>);
   await user.click(screen.getByRole('button',{name:'Log a meal'}));
   fireEvent.change(screen.getByLabelText('Meal name'),{target:{value:'Lunch'}});
-  fireEvent.change(screen.getByLabelText('Search your food catalogue'),{target:{value:'brown rice'}});
+  fireEvent.change(screen.getByLabelText('Search food 1 in your catalogue'),{target:{value:'brown rice'}});
   await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(1));
-  await user.selectOptions(await screen.findByLabelText('Select food'), '84');
-  fireEvent.change(screen.getByLabelText('Portion weight'),{target:{value:'150'}});
+  await user.selectOptions(await screen.findByLabelText('Select catalogue food 1'),'84');
+  fireEvent.change(screen.getByLabelText('Portion weight for food 1 (g)'),{target:{value:'150'}});
+  await user.click(screen.getByRole('button',{name:'Add another food'}));
+  fireEvent.change(screen.getByLabelText('Search food 2 in your catalogue'),{target:{value:'spinach'}});
+  await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(2));
+  await user.selectOptions(await screen.findByLabelText('Select catalogue food 2'),'85');
+  fireEvent.change(screen.getByLabelText('Portion weight for food 2 (g)'),{target:{value:'50'}});
   await user.click(screen.getByRole('button',{name:'Preview meal'}));
-  expect((await screen.findByText(/Meal total:/)).textContent).toContain('185 kcal');
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  await user.click(screen.getByRole('button',{name:'Confirm log'}));
-  expect((await screen.findByRole('status')).textContent).toContain('Lunch was added to your meal log. Calories: 185 kcal.');
+  expect((await screen.findByText(/Meal total:/)).textContent).toContain('196 kcal');
   expect(fetchMock).toHaveBeenCalledTimes(3);
-  const previewInit=fetchMock.mock.calls[1][1] as RequestInit;
+  await user.click(screen.getByRole('button',{name:'Confirm log'}));
+  expect((await screen.findByRole('status')).textContent).toContain('Lunch was added to your meal log. Calories: 196 kcal.');
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+  const previewInit=fetchMock.mock.calls[2][1] as RequestInit;
   const request=JSON.parse(String(previewInit.body));
-  expect(request.action).toBe('log_meal');expect(request.meal.items[0]).toMatchObject({food_id:84,grams:150});
+  expect(request.action).toBe('log_meal');
+  expect(request.meal.items).toEqual([{food_id:84,grams:150},{food_id:85,grams:50}]);
  });
 });
