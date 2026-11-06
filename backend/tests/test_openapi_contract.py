@@ -41,3 +41,6 @@ def test_openapi_paths_include_generated_request_body_contracts():
     assert '"add_food_api_v1_foods_post"' in generated
     assert '"add_meal_api_v1_meals_post"' in generated
     assert '"application/json": components["schemas"]["MealIn"]' in generated
+    assert '"201": { content: { "application/json": components["schemas"]["AuthSessionOut"]' in generated
+    assert '"201": { content: { "application/json": components["schemas"]["FoodOut"]' in generated
+    assert '"201": { content: { "application/json": components["schemas"]["MealOut"]' in generated

@@ -56,7 +56,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionOut"
+                }
               }
             }
           },
@@ -92,7 +94,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionOut"
+                }
               }
             }
           },
@@ -118,7 +122,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AccessTokenOut"
+                }
               }
             }
           }
@@ -217,7 +223,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
               }
             }
           }
@@ -572,7 +580,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FoodOut"
+                  },
+                  "title": "Response Foods Api V1 Foods Get"
+                }
               }
             }
           },
@@ -606,7 +620,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -716,7 +732,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FoodOut"
+                  },
+                  "type": "array",
+                  "title": "Response Favorite Foods Api V1 Foods Favorites Get"
+                }
               }
             }
           }
@@ -794,7 +816,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FoodOut"
+                  },
+                  "type": "array",
+                  "title": "Response Recent Foods Api V1 Foods Recent Get"
+                }
               }
             }
           }
@@ -853,7 +881,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -898,7 +928,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -1200,7 +1232,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -1247,7 +1281,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FoodOut"
+                }
               }
             }
           },
@@ -1292,7 +1328,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MealOut"
+                  },
+                  "title": "Response Meals Api V1 Meals Get"
+                }
               }
             }
           },
@@ -1326,7 +1368,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MealOut"
+                }
               }
             }
           },
@@ -1352,7 +1396,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryOut"
+                }
               }
             }
           }
@@ -1382,7 +1428,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsRangeOut"
+                }
               }
             }
           },
@@ -1419,7 +1467,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MealOut"
+                }
               }
             }
           },
@@ -1464,7 +1514,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MealOut"
+                }
               }
             }
           },
@@ -2320,6 +2372,106 @@
   },
   "components": {
     "schemas": {
+      "AccessTokenOut": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "AccessTokenOut"
+      },
+      "AnalyticsDayOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/NutrientTotalsOut"
+          },
+          "meal_count": {
+            "type": "integer",
+            "title": "Meal Count"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "date",
+          "totals",
+          "meal_count"
+        ],
+        "title": "AnalyticsDayOut"
+      },
+      "AnalyticsRangeOut": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsDayOut"
+            },
+            "type": "array",
+            "title": "Daily"
+          },
+          "weights": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsWeightOut"
+            },
+            "type": "array",
+            "title": "Weights"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "days",
+          "start_date",
+          "end_date",
+          "daily",
+          "weights"
+        ],
+        "title": "AnalyticsRangeOut"
+      },
+      "AnalyticsWeightOut": {
+        "properties": {
+          "weight_kg": {
+            "type": "number",
+            "title": "Weight Kg"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "weight_kg",
+          "recorded_at"
+        ],
+        "title": "AnalyticsWeightOut"
+      },
       "AssistantActionPreviewIn": {
         "properties": {
           "conversation_id": {
@@ -2372,6 +2524,48 @@
           "idempotency_key"
         ],
         "title": "AssistantActionPreviewIn"
+      },
+      "AuthSessionOut": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "goals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Goals"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Profile"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "access_token",
+          "id",
+          "name",
+          "email",
+          "goals",
+          "profile"
+        ],
+        "title": "AuthSessionOut"
       },
       "BarcodeImportIn": {
         "properties": {
@@ -2461,6 +2655,44 @@
           "idempotency_key"
         ],
         "title": "ChatIn"
+      },
+      "DailySummaryOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "goals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Goals"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/NutrientTotalsOut"
+          },
+          "water_ml": {
+            "type": "integer",
+            "title": "Water Ml"
+          },
+          "meals": {
+            "items": {
+              "$ref": "#/components/schemas/MealOut"
+            },
+            "type": "array",
+            "title": "Meals"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "date",
+          "goals",
+          "totals",
+          "water_ml",
+          "meals"
+        ],
+        "title": "DailySummaryOut"
       },
       "DeleteAccountIn": {
         "properties": {
@@ -2613,6 +2845,223 @@
         ],
         "title": "FoodIn"
       },
+      "FoodOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases"
+          },
+          "recipe": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe"
+          },
+          "is_custom": {
+            "type": "boolean",
+            "title": "Is Custom",
+            "default": false
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite",
+            "default": false
+          },
+          "verification": {
+            "type": "string",
+            "title": "Verification"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "nutrition_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutrition Basis"
+          },
+          "nutrition_provenance": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Nutrition Provenance"
+          },
+          "data_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Notes"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          },
+          "servings": {
+            "items": {
+              "$ref": "#/components/schemas/FoodServingOut"
+            },
+            "type": "array",
+            "title": "Servings"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state",
+          "verification"
+        ],
+        "title": "FoodOut"
+      },
       "FoodServingIn": {
         "properties": {
           "label": {
@@ -2634,6 +3083,35 @@
           "grams"
         ],
         "title": "FoodServingIn"
+      },
+      "FoodServingOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "grams": {
+            "type": "number",
+            "title": "Grams"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "grams",
+          "source"
+        ],
+        "title": "FoodServingOut"
       },
       "ForgotPasswordIn": {
         "properties": {
@@ -2947,6 +3425,268 @@
         ],
         "title": "MealItemIn"
       },
+      "MealItemOut": {
+        "properties": {
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "food_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Food Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "food": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Food"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "grams": {
+            "type": "number",
+            "title": "Grams"
+          },
+          "portion_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portion Label"
+          },
+          "per100": {
+            "$ref": "#/components/schemas/NutritionPer100"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Record Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "nutrition_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nutrition Basis"
+          },
+          "nutrition_provenance": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Nutrition Provenance"
+          },
+          "data_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Notes"
+          },
+          "recipe": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "grams"
+        ],
+        "title": "MealItemOut"
+      },
+      "MealOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "meal_type": {
+            "type": "string",
+            "title": "Meal Type"
+          },
+          "eaten_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Eaten At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MealItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "meal_type",
+          "eaten_at",
+          "items"
+        ],
+        "title": "MealOut"
+      },
       "MealReminderTimesIn": {
         "properties": {
           "breakfast": {
@@ -2990,6 +3730,57 @@
         },
         "type": "object",
         "title": "MealRemindersIn"
+      },
+      "NutrientTotalsOut": {
+        "properties": {
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "NutrientTotalsOut"
       },
       "NutritionPer100": {
         "properties": {
@@ -3417,6 +4208,49 @@
           "grams"
         ],
         "title": "ScanConfirmItemIn"
+      },
+      "UserOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "goals": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Goals"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Profile"
+          },
+          "preferences": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Preferences"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "goals",
+          "profile",
+          "preferences"
+        ],
+        "title": "UserOut"
       },
       "ValidationError": {
         "properties": {

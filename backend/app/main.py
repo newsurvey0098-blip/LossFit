@@ -5,7 +5,7 @@ import os, secrets, csv, io, json, ssl
 import hashlib, hmac, smtplib
 from uuid import uuid4
 from email.message import EmailMessage
-from typing import Generator, Literal
+from typing import Any, Generator, Literal
 from pathlib import Path
 import base64, difflib, re
 
@@ -18,7 +18,7 @@ from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
@@ -340,6 +340,40 @@ class WeightIn(BaseModel): weight_kg:float=Field(gt=20,le=350); recorded_at:date
 class ForgotPasswordIn(BaseModel): email:EmailStr
 class ResetPasswordIn(BaseModel): token:str=Field(min_length=32,max_length=256); password:str=Field(min_length=10,max_length=128)
 
+class ApiResponse(BaseModel):
+    model_config=ConfigDict(extra="allow")
+
+class GoalsOut(ApiResponse):
+    calories:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+class UserOut(ApiResponse):
+    id:int;name:str;email:EmailStr;goals:dict[str,Any];profile:dict[str,Any];preferences:dict[str,Any]
+class AuthSessionOut(ApiResponse):
+    access_token:str;id:int;name:str;email:EmailStr;goals:dict[str,Any];profile:dict[str,Any]
+class AccessTokenOut(ApiResponse):access_token:str
+class FoodServingOut(ApiResponse):id:int;label:str;grams:float;source:str
+class FoodOut(ApiResponse):
+    id:int;name:str;state:str;brand:str|None=None;category:str|None=None;aliases:list[str]=Field(default_factory=list)
+    recipe:dict[str,Any]|None=None;is_custom:bool=False;is_favorite:bool=False;verification:str
+    source:str|None=None;source_record_id:str|None=None;source_url:str|None=None;nutrition_basis:str|None=None
+    nutrition_provenance:dict[str,dict[str,Any]]=Field(default_factory=dict);data_notes:str|None=None;image_url:str|None=None
+    updated_at:datetime|None=None;kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+    servings:list[FoodServingOut]=Field(default_factory=list)
+class MealItemOut(ApiResponse):
+    snapshot_id:str|None=None;food_id:int|None=None;name:str|None=None;food:str|None=None;state:str|None=None
+    brand:str|None=None;grams:float;portion_label:str|None=None;per100:NutritionPer100=Field(default_factory=NutritionPer100)
+    verification:str|None=None;source:str|None=None;source_record_id:str|None=None;source_url:str|None=None
+    nutrition_basis:str|None=None;nutrition_provenance:dict[str,dict[str,Any]]=Field(default_factory=dict)
+    data_notes:str|None=None;recipe:dict[str,Any]|None=None
+class MealOut(ApiResponse):
+    id:int;name:str;meal_type:str;eaten_at:datetime;items:list[MealItemOut]
+    kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+class NutrientTotalsOut(ApiResponse):kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+class DailySummaryOut(ApiResponse):
+    date:date;goals:dict[str,Any];totals:NutrientTotalsOut;water_ml:int;meals:list[MealOut]
+class AnalyticsDayOut(ApiResponse):date:date;totals:NutrientTotalsOut;meal_count:int
+class AnalyticsWeightOut(ApiResponse):weight_kg:float;recorded_at:datetime
+class AnalyticsRangeOut(ApiResponse):days:int;start_date:date;end_date:date;daily:list[AnalyticsDayOut];weights:list[AnalyticsWeightOut]
+
 def clean_aliases(name:str,values:list[str])->list[str]:
     seen={name.strip().casefold()};out=[]
     for value in values:
@@ -442,12 +476,12 @@ def live(): return {"status":"ok","service":"lossfit"}
 def ready(s:Session=Depends(db)):
     try: s.execute(select(1)); return {"status":"ready","database":"connected"}
     except Exception: raise HTTPException(503,"Database unavailable")
-@app.post("/api/v1/auth/register",status_code=201)
+@app.post("/api/v1/auth/register",status_code=201,response_model=AuthSessionOut,response_model_exclude_unset=True)
 def register(data:RegisterIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"register_ip",request_ip(request),100,3600)
     if s.scalar(select(User).where(User.email==data.email.lower())): raise HTTPException(409,"Account already exists")
     user=User(name=data.name.strip(),email=data.email.lower(),password_hash=hasher.hash(data.password));s.add(user);s.flush();result=new_auth_session(user,s,response);s.commit();return result
-@app.post("/api/v1/auth/login")
+@app.post("/api/v1/auth/login",response_model=AuthSessionOut,response_model_exclude_unset=True)
 def login(data:LoginIn,request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"login_ip",request_ip(request),15,900)
     user=s.scalar(select(User).where(User.email==data.email.lower()))
@@ -455,7 +489,7 @@ def login(data:LoginIn,request:Request,response:Response,s:Session=Depends(db)):
     except VerificationError:verified=False
     if not verified:raise HTTPException(401,"Email or password is incorrect")
     result=new_auth_session(user,s,response);s.commit();return result
-@app.post("/api/v1/auth/refresh")
+@app.post("/api/v1/auth/refresh",response_model=AccessTokenOut)
 def refresh_access_token(request:Request,response:Response,s:Session=Depends(db)):
     enforce_rate_limit(s,"refresh_ip",request_ip(request),120,900)
     raw=request.cookies.get("lf_refresh")
@@ -517,7 +551,7 @@ def logout(request:Request,response:Response,s:Session=Depends(db)):
         session=s.scalar(select(AuthSession).where(AuthSession.refresh_token_hash==token_hash(raw)))
         if session and session.revoked_at is None:session.revoked_at=datetime.now(timezone.utc);s.commit()
     response.delete_cookie("lf_refresh",path="/api/v1/auth");response.delete_cookie("lf_csrf",path="/")
-@app.get("/api/v1/auth/me")
+@app.get("/api/v1/auth/me",response_model=UserOut,response_model_exclude_unset=True)
 def me(u:User=Depends(current_user)): return {"id":u.id,"name":u.name,"email":u.email,"goals":u.goals,"profile":u.profile,"preferences":u.preferences}
 @app.get("/api/v1/auth/google/status")
 def google_status(s:Session=Depends(db),u:User=Depends(current_user)):
@@ -620,7 +654,7 @@ def update_preferences(data:PreferencesIn,s:Session=Depends(db),u:User=Depends(c
     reminders=data.meal_reminders.model_dump() if data.meal_reminders else current.get("meal_reminders",MealRemindersIn().model_dump())
     u.preferences={**current,"diet":data.diet,"allergies":allergies,"timezone":data.timezone,"units":data.units,"meal_reminders":reminders}
     s.commit();return {"preferences":u.preferences}
-@app.get("/api/v1/foods")
+@app.get("/api/v1/foods",response_model=list[FoodOut],response_model_exclude_unset=True)
 def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=Depends(current_user)):
     statement=select(Food).where(or_(Food.owner_id.is_(None),Food.owner_id==u.id))
     needle=q.strip()
@@ -726,7 +760,7 @@ def drain_private_file_cleanup(s:Session,limit:int=100)->dict:
     s.commit()
     return {"removed":removed,"failed":failed,"remaining":s.scalar(select(func.count()).select_from(PrivateFileCleanup)) or 0}
 
-@app.get("/api/v1/foods/favorites")
+@app.get("/api/v1/foods/favorites",response_model=list[FoodOut],response_model_exclude_unset=True)
 def favorite_foods(s:Session=Depends(db),u:User=Depends(current_user)):
     records=list(s.scalars(select(Food).join(FoodFavorite,FoodFavorite.food_id==Food.id).where(FoodFavorite.owner_id==u.id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(FoodFavorite.created_at.desc())))
     return [food_payload(food,s,True) for food in records]
@@ -742,7 +776,7 @@ def remove_food_favorite(food_id:int,s:Session=Depends(db),u:User=Depends(curren
     accessible_food(food_id,s,u)
     s.execute(delete(FoodFavorite).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id==food_id));s.commit()
 
-@app.get("/api/v1/foods/recent")
+@app.get("/api/v1/foods/recent",response_model=list[FoodOut],response_model_exclude_unset=True)
 def recent_foods(s:Session=Depends(db),u:User=Depends(current_user)):
     records=list(s.execute(select(Food,FoodRecent.viewed_at).join(FoodRecent,FoodRecent.food_id==Food.id).where(FoodRecent.owner_id==u.id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(FoodRecent.viewed_at.desc()).limit(30)))
     favorite_ids=set(s.scalars(select(FoodFavorite.food_id).where(FoodFavorite.owner_id==u.id,FoodFavorite.food_id.in_([food.id for food,_ in records])))) if records else set()
@@ -754,7 +788,7 @@ def touch_recent_food(food_id:int,s:Session=Depends(db),u:User=Depends(current_u
     statement=postgres_insert(FoodRecent).values(owner_id=u.id,food_id=food_id,viewed_at=datetime.now(timezone.utc)).on_conflict_do_update(constraint="uq_food_recent_owner_food",set_={"viewed_at":datetime.now(timezone.utc)})
     s.execute(statement);s.commit()
 
-@app.get("/api/v1/foods/{food_id}")
+@app.get("/api/v1/foods/{food_id}",response_model=FoodOut,response_model_exclude_unset=True)
 def food_detail(food_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,((Food.owner_id==None)|(Food.owner_id==u.id))))
     if not f: raise HTTPException(404,"Food not found")
@@ -797,7 +831,7 @@ def delete_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_u
     if not food:raise HTTPException(404,"Personal food not found")
     if food.image_path:queue_private_file_cleanup(s,food.image_path);food.image_path=None
     s.commit();drain_private_file_cleanup(s)
-@app.post("/api/v1/foods",status_code=201)
+@app.post("/api/v1/foods",status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
 def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
     f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",nutrition_provenance=provenance,kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
@@ -815,7 +849,7 @@ def add_label_food(data:LabelFoodIn,s:Session=Depends(db),u:User=Depends(current
     provenance={key:{"status":"user_provided","source":source,"derivation":derivation} for key,value in per100.items() if value is not None}
     food=Food(owner_id=u.id,name=data.name.strip(),state="packaged",brand=data.brand.strip() if data.brand else None,category="Packaged food",aliases=[],verification="user_provided",source=source,nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes="Values came from a package label. Vision extraction, when used, was reviewed by the user; LossFit has not independently verified the label.",**per100)
     s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"));s.add(FoodServing(food_id=food.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"));s.commit();s.refresh(food);return food_payload(food,s)
-@app.put("/api/v1/foods/{food_id}")
+@app.put("/api/v1/foods/{food_id}",response_model=FoodOut,response_model_exclude_unset=True)
 def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not f:raise HTTPException(404,"Personal food not found")
@@ -885,10 +919,10 @@ def write_recipe(data:RecipeIn,s:Session,u:User,food:Food|None=None):
     for key,value in totals.items():setattr(food,key,None if value is None else value*100/data.yield_grams)
     s.commit();s.refresh(food);return food_payload(food,s)
 
-@app.post('/api/v1/recipes',status_code=201)
+@app.post('/api/v1/recipes',status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
 def create_recipe(data:RecipeIn,s:Session=Depends(db),u:User=Depends(current_user)):return write_recipe(data,s,u)
 
-@app.put('/api/v1/recipes/{food_id}')
+@app.put('/api/v1/recipes/{food_id}',response_model=FoodOut,response_model_exclude_unset=True)
 def edit_recipe(food_id:int,data:RecipeIn,s:Session=Depends(db),u:User=Depends(current_user)):
     food=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id).with_for_update())
     if not food or not food.recipe:raise HTTPException(404,'Recipe not found')
@@ -918,13 +952,13 @@ def local_date_bounds(start_date:date|None,end_date:date|None,u:User):
     end=datetime.combine(end_date+timedelta(days=1),datetime.min.time(),tz).astimezone(timezone.utc) if end_date else None
     return start,end
 
-@app.get("/api/v1/meals")
+@app.get("/api/v1/meals",response_model=list[MealOut],response_model_exclude_unset=True)
 def meals(date_filter:date|None=Query(default=None,alias="date"),s:Session=Depends(db),u:User=Depends(current_user)):
     query=select(Meal).where(Meal.owner_id==u.id)
     if date_filter:
         start,end=local_date_bounds(date_filter,date_filter,u);query=query.where(Meal.eaten_at>=start,Meal.eaten_at<end)
     return [meal_payload(m) for m in s.scalars(query.order_by(Meal.eaten_at.desc()).limit(500))]
-@app.get("/api/v1/analytics/daily")
+@app.get("/api/v1/analytics/daily",response_model=DailySummaryOut,response_model_exclude_unset=True)
 def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
     local_tz=user_timezone(u)
     now=datetime.now(local_tz); local_start=now.replace(hour=0,minute=0,second=0,microsecond=0); start=local_start.astimezone(timezone.utc);end=(local_start+timedelta(days=1)).astimezone(timezone.utc)
@@ -933,7 +967,7 @@ def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
     totals={key:(None if any(getattr(m,key) is None for m in day_meals) else sum(getattr(m,key) for m in day_meals)) for key in ("kcal","protein","carbs","fat")}
     return {"date":local_start.date().isoformat(),"goals":u.goals,"totals":totals,"water_ml":water_total,"meals":[meal_payload(m) for m in day_meals]}
 
-@app.get("/api/v1/analytics/range")
+@app.get("/api/v1/analytics/range",response_model=AnalyticsRangeOut,response_model_exclude_unset=True)
 def analytics_range(days:int=Query(default=7,ge=7,le=90),s:Session=Depends(db),u:User=Depends(current_user)):
     tz=user_timezone(u);today=datetime.now(tz).date();first=today-timedelta(days=days-1)
     start,end=local_date_bounds(first,today,u)
@@ -947,15 +981,15 @@ def analytics_range(days:int=Query(default=7,ge=7,le=90),s:Session=Depends(db),u
         daily.append({"date":day.isoformat(),"totals":values,"meal_count":len(meals_on_day)})
     weights=list(s.scalars(select(WeightRecord).where(WeightRecord.owner_id==u.id,WeightRecord.recorded_at>=start,WeightRecord.recorded_at<end).order_by(WeightRecord.recorded_at)))
     return {"days":days,"start_date":first.isoformat(),"end_date":today.isoformat(),"daily":daily,"weights":[{"weight_kg":w.weight_kg,"recorded_at":w.recorded_at} for w in weights]}
-@app.post("/api/v1/meals",status_code=201)
+@app.post("/api/v1/meals",status_code=201,response_model=MealOut,response_model_exclude_unset=True)
 def add_meal(data:MealIn,s:Session=Depends(db),u:User=Depends(current_user)):
     m=persist_meal(s,u,data);s.add(m);s.commit();s.refresh(m);return meal_payload(m)
-@app.get("/api/v1/meals/{meal_id}")
+@app.get("/api/v1/meals/{meal_id}",response_model=MealOut,response_model_exclude_unset=True)
 def meal_detail(meal_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
     m=s.scalar(select(Meal).where(Meal.id==meal_id,Meal.owner_id==u.id))
     if not m: raise HTTPException(404,"Meal not found")
     return meal_payload(m)
-@app.put("/api/v1/meals/{meal_id}")
+@app.put("/api/v1/meals/{meal_id}",response_model=MealOut,response_model_exclude_unset=True)
 def update_meal(meal_id:int,data:MealIn,s:Session=Depends(db),u:User=Depends(current_user)):
     m=s.scalar(select(Meal).where(Meal.id==meal_id,Meal.owner_id==u.id))
     if not m: raise HTTPException(404,"Meal not found")
