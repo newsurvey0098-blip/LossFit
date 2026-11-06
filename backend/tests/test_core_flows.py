@@ -1,6 +1,7 @@
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import csv
 import io
 import json, os, subprocess, sys
 from PIL import Image
@@ -40,6 +41,19 @@ def test_registration_meal_snapshot_summary_and_export():
         assert client.get('/api/v1/analytics/daily').json()['totals']['kcal']==195
         assert len(client.get('/api/v1/privacy/export.json').json()['meals'])==1
         assert 'Lunch' in client.get('/api/v1/privacy/export.csv').text
+
+def test_csv_export_neutralizes_spreadsheet_formula_prefixes():
+    with TestClient(app) as client:
+        register(client)
+        headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        risky_names=["=1+1","+1+1","-1+1","@SUM(1,1)","\t=1+1"]
+        stored_names=[]
+        for name in risky_names:
+            saved=client.post('/api/v1/meals',headers=headers,json={"name":name,"meal_type":"snack","items":[]})
+            assert saved.status_code==201
+            stored_names.append(saved.json()['name'])
+        rows=list(csv.reader(io.StringIO(client.get('/api/v1/privacy/export.csv').text)))
+        assert sorted(row[1] for row in rows[1:])==sorted("'"+name for name in stored_names),repr(rows)
 
 def test_barcode_gtin_validation_and_open_food_facts_lookup(monkeypatch):
     product={"barcode":"3017624010701","name":"Hazelnut cocoa spread","brand":"Example Brand","quantity":"350 g","category":"Spreads","nutrition_per":"100 g","nutrients":{"kcal":539.0,"protein":6.3,"carbs":57.5,"fat":30.9},"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":"3017624010701","source_url":"https://world.openfoodfacts.org/product/3017624010701","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
