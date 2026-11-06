@@ -36,8 +36,9 @@ describe('source-level interactive UI invariants', () => {
       const ast = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 
       function visit(node) {
-        if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'button') {
-          const attributes = node.openingElement.attributes.properties;
+        const buttonElement = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+        if (buttonElement && buttonElement.tagName.getText(ast) === 'button') {
+          const attributes = buttonElement.attributes.properties;
           const hasClickHandler = attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(ast) === 'onClick');
           const hasExplicitType = attributes.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(ast) === 'type');
           if (hasClickHandler && !hasExplicitType) {
