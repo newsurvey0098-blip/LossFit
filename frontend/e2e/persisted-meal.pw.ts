@@ -152,7 +152,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('button',{name:'Remove from favorites'})).toHaveAttribute('aria-pressed','true');
   await page.getByLabel('Meal').selectOption('lunch',{timeout:15000});
   const foodDetailMealWrite=page.waitForResponse(response=>response.url().endsWith('/api/v1/meals')&&response.request().method()==='POST');
-  await page.getByRole('button',{name:'Add to meal',exact:true}).click();
+  await page.getByRole('button',{name:'Add to meal',exact:true}).dblclick();
   const savedFoodMeal=await foodDetailMealWrite;
   expect(savedFoodMeal.status()).toBe(201);
   expect((await savedFoodMeal.json()).kcal).toBeCloseTo(225,2);

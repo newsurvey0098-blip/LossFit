@@ -2,13 +2,38 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {cleanup,render,screen,waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {MemoryRouter} from 'react-router-dom';
+import {MemoryRouter,Route,Routes} from 'react-router-dom';
 
 vi.mock('./api',()=>({api:vi.fn(),authenticatedFetch:vi.fn(),jsonBody:vi.fn(),upload:vi.fn()}));
 import {api} from './api';
-import {FoodsPage} from './FoodPages';
+import {FoodDetailPage,FoodsPage} from './FoodPages';
 
-afterEach(()=>{cleanup();vi.clearAllMocks()});
+afterEach(()=>{cleanup();vi.clearAllMocks();window.history.replaceState(null,'','/')});
+
+describe('food detail meal logging',()=>{
+ it('shows progress and prevents a rapid repeat write',async()=>{
+  const food={id:42,name:'Oat bowl',state:'cooked',verification:'user_provided',kcal:150,protein:5,carbs:27,fat:3,servings:[{id:1,label:'100 g',grams:100,source:'user'}]};
+  let finishWrite:(value:unknown)=>void=()=>{};
+  vi.mocked(api).mockImplementation((path:string,init?:RequestInit)=>{
+   if(path==='/foods/42')return Promise.resolve(food) as never;
+   if(path==='/foods/42/recent')return Promise.resolve({}) as never;
+   if(path==='/meals'&&init?.method==='POST')return new Promise(resolve=>{finishWrite=resolve}) as never;
+   return Promise.resolve([]) as never;
+  });
+  window.history.pushState(null,'','/foods/42');
+  const user=userEvent.setup();
+  render(<MemoryRouter initialEntries={['/foods/42']}><Routes><Route path="/foods/:foodId" element={<FoodDetailPage/>}/></Routes></MemoryRouter>);
+  await user.selectOptions(await screen.findByLabelText('Choose a serving'),'100 g');
+  const add=await screen.findByRole('button',{name:'Add to meal'});
+  await user.dblClick(add);
+  const busy=await screen.findByRole('button',{name:'Adding…'});
+  expect(busy.hasAttribute('disabled')).toBe(true);
+  expect(vi.mocked(api).mock.calls.filter(([path,init])=>path==='/meals'&&init?.method==='POST')).toHaveLength(1);
+  finishWrite({id:99});
+  expect(await screen.findByRole('status')).toBeTruthy();
+  expect(screen.getByText('Added to your meal log.')).toBeTruthy();
+ });
+});
 
 describe('USDA branded catalogue search',()=>{
  it('searches, imports privately and links to the saved food',async()=>{
