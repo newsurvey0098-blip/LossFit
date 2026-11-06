@@ -1,6 +1,6 @@
 # Vercel deployment status
 
-Updated 2026-11-06. LossFit is not deployed to Vercel. `vercel.json` now describes one Vercel Services deployment with a Vite frontend and FastAPI backend, routes `/api/*` to the API, and includes a frontend-service fallback for React Router deep links. Vercel Services is currently a Beta product; this routing has not yet been validated by a live Vercel deployment.
+Updated 2026-11-06. A Vercel project named `lossfit` was created from `newsurvey0098-blip/LossFit` (project ID `prj_5bfTvSY47w2TDk1HfktyUWq9qiJN`, team `team_W2KanS4wc8XeYdHi1KzMJFiY`). No deployment has been verified. Vercel currently returns 403 for project inspection under this team; its one-time team authorization link must be approved before deployment configuration can be inspected or changed. `vercel.json` describes one Vercel Services deployment with a Vite frontend and FastAPI backend, routes `/api/*` to the API, and includes a frontend-service fallback for React Router deep links. Vercel Services is currently a Beta product; this routing has not yet been validated by a live Vercel deployment.
 
 ## Repository deployment shape
 
@@ -12,7 +12,7 @@ Updated 2026-11-06. LossFit is not deployed to Vercel. `vercel.json` now describ
 
 ## Vercel access and production resources
 
-- The connected Vercel account returns `403 Not authorized` for its default team. A single-use team-access approval URL was generated on 2026-11-06 and must be opened and approved by the owner before project APIs can be called. GitHub collaborator access does not grant Vercel team access.
+- The connected Vercel account returns `403 Not authorized` for team `newsurvey0098-3154`. The `lossfit` project creation succeeded, but inspection/deployment calls need team authorization. A fresh single-use approval link has been generated for the owner. GitHub collaborator access does not grant Vercel team access.
 - Supabase project `lossfit-production` (`gwvmbkjuggacwnckrwow`) is `ACTIVE_HEALTHY` in `ap-south-1`, running PostgreSQL 17.11.0.018. A read-only inspection on 2026-11-06 found no public tables, no migration history, and no health or security advisor findings. It remains an empty provisioned database; production credentials, a least-privilege runtime role, and remote migrations are not configured. The app still points to the local development database.
 - Local AI, Google OAuth, and SMTP credentials are empty. Those integrations are unavailable until production credentials are set and live flows are verified.
 - USDA Branded search/import is implemented but unavailable until a server-side `FDC_API_KEY` is configured. The key is never sent to the browser. Searches and imports are rate-limited, and imported records are private to the requesting user. USDA requires an API key and directs developers to keep it out of public code; see the [USDA FoodData Central API Guide](https://fdc.nal.usda.gov/api-guide/).
