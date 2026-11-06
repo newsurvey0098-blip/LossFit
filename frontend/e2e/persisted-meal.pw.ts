@@ -8,8 +8,10 @@ async function checkResponsive(page: import('@playwright/test').Page, screenName
     const layout=await page.evaluate(()=>{const main=document.querySelector('main#main-content')!;const dock=document.querySelector('nav.bottom');return {viewport:window.innerWidth,document:document.documentElement.scrollWidth,mainWidth:main.clientWidth,mainContent:main.scrollWidth,mainBottom:main.getBoundingClientRect().bottom,dockTop:dock?.getBoundingClientRect().top??null,offenders:[...main.querySelectorAll('*')].map(element=>({tag:element.tagName.toLowerCase(),className:typeof element.className==='string'?element.className:'',text:(element.textContent??'').trim().slice(0,50),right:Math.round(element.getBoundingClientRect().right)})).filter(element=>element.right>main.getBoundingClientRect().right+1).slice(0,6)}});
     expect(layout.document<=layout.viewport&&layout.mainContent<=layout.mainWidth,`${screenName} overflows horizontally at ${width}px: ${JSON.stringify(layout.offenders)}`).toBe(true);
     expect(layout.dockTop===null||layout.dockTop>=layout.mainBottom-1,`${screenName} navigation overlaps the scrolling content at ${width}px`).toBe(true);
-    if(width===390||width===1440)
+    if(width===390||width===1440){
+      await page.locator('main#main-content').evaluate(main=>main.scrollTo(0,0));
       await page.screenshot({path:info.outputPath(`${screenName}-${width}.png`),fullPage:true});
+    }
   }
   await page.setViewportSize({width:390,height:844});
 }
@@ -287,6 +289,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Message the nutrition assistant').fill('Will this meal fit my day?');
   await page.getByRole('button',{name:'Send message'}).click();
   await expect(page.getByText('This is a deterministic test response based on your saved nutrition log.')).toBeVisible({timeout:15000});
+  await checkResponsive(page,'assistant-conversation',info);
   await page.reload();
   await expect(page.locator('.bubble.user p')).toHaveText('Will this meal fit my day?');
   await expect(page.getByText('This is a deterministic test response based on your saved nutrition log.')).toBeVisible();
