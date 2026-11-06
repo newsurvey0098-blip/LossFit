@@ -39,6 +39,10 @@ type CatalogFood = {
 
 export function NewMealPage() {
   const navigate = useNavigate();
+  const searchInput = React.useRef<HTMLInputElement>(null);
+  const servingInput = React.useRef<HTMLSelectElement>(null);
+  const amountInput = React.useRef<HTMLInputElement>(null);
+  const pickerWasOpen = React.useRef(false);
   const [name, setName] = React.useState('');
   const [mealType, setMealType] = React.useState('breakfast');
   const [query, setQuery] = React.useState('');
@@ -50,6 +54,16 @@ export function NewMealPage() {
   const [serving, setServing] = React.useState('');
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    if (picked) {
+      pickerWasOpen.current = true;
+      (servingInput.current ?? amountInput.current)?.focus();
+    } else if (pickerWasOpen.current) {
+      pickerWasOpen.current = false;
+      searchInput.current?.focus();
+    }
+  }, [picked]);
 
   React.useEffect(() => {
     let active = true; setSearching(true);
@@ -98,13 +112,13 @@ export function NewMealPage() {
         </div><button type="button" className="button" onClick={() => setItems((current) => current.filter((_, i) => i !== index))}>Remove</button>
       </article>)}
       <section className="food-picker" aria-label="Add foods to new meal">
-        <label>Search foods<input aria-label="Search foods to add" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search food catalogue" /></label>
+        <label>Search foods<input ref={searchInput} aria-label="Search foods to add" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search food catalogue" /></label>
         {picked ? <>
           <p className="muted">Adding <b>{picked.name}</b></p>
-          {picked.servings.length > 0 && <label>Serving<select value={serving} onChange={(e) => { setServing(e.target.value); const servingValue = picked.servings.find((value) => value.label === e.target.value); if (servingValue) setGrams(servingValue.grams); }}>
+          {picked.servings.length > 0 && <label>Serving<select ref={servingInput} value={serving} onChange={(e) => { setServing(e.target.value); const servingValue = picked.servings.find((value) => value.label === e.target.value); if (servingValue) setGrams(servingValue.grams); }}>
             {picked.servings.map((value) => <option key={value.id} value={value.label}>{value.label} ({value.grams} g)</option>)}<option>Custom grams</option>
           </select></label>}
-          <label>Amount in grams<input type="number" min="1" max="10000" value={grams} onChange={(e) => { setServing('Custom grams'); setGrams(Math.max(1, Number(e.target.value) || 1)); }} /></label>
+          <label>Amount in grams<input ref={amountInput} type="number" min="1" max="10000" value={grams} onChange={(e) => { setServing('Custom grams'); setGrams(Math.max(1, Number(e.target.value) || 1)); }} /></label>
           <div className="actions"><button type="button" className="button primary" onClick={addFood}>Add item</button><button type="button" className="button" onClick={() => setPicked(null)}>Choose another</button></div>
         </> : searching ? <p className="muted" role="status">Searching foods…</p> : <div className="food-picker-results">
           {results.map((food) => <button type="button" className="card food-result" key={food.id} onClick={() => selectFood(food)}><span>{food.name} <small>{food.state}</small></span><span>{food.kcal == null ? '— kcal' : `${food.kcal} kcal / 100 g`}</span></button>)}
