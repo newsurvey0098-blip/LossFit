@@ -6,7 +6,7 @@ The shared layout provides a keyboard-visible skip link, a focusable main landma
 
 `npm.cmd run test:e2e:local` passed both Chromium tests after these changes. The navigation test uses deterministic API fixtures and runs axe WCAG 2 A/AA and WCAG 2.1 AA checks on login, catalogue, manual food entry, and the scanner unavailable state. No violations were reported on those states. It also verifies keyboard activation of the skip link, focus on main content, the catalogue navigation announcement, horizontal overflow at 320/390/768/1440px, and that the manual-entry save button remains unobstructed after scrolling.
 
-The companion live API test uses a freshly migrated PostgreSQL database for registration, onboarding, weight, conversations, food/meal logging, editing, exports, and deletion.
+The companion live API test uses a freshly migrated PostgreSQL database for registration, onboarding, weight, conversations, food/meal logging, editing, exports, and deletion. The same authenticated journey now also runs axe against the profile (including meal-reminder controls) and Help page; no WCAG 2/2.1 A/AA violations were reported there.
 
 ## Remaining verification
 

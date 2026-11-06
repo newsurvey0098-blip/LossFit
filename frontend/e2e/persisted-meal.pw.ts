@@ -1,5 +1,6 @@
 import {expect,test} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+import AxeBuilder from '@axe-core/playwright';
 
 test('registration, onboarding, private food, and meal persist through the API',async({page})=>{
   test.setTimeout(90000);
@@ -274,6 +275,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByText('No meals logged yet today.')).toBeVisible();
   await page.goto('/profile');
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   await page.getByLabel('Enable in-app meal reminders').check();
   await page.getByLabel('Breakfast time').fill('07:45');
   await page.getByRole('button',{name:'Save reminders'}).click();
@@ -283,6 +285,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByLabel('Breakfast time')).toHaveValue('07:45');
   await page.getByRole('link',{name:'Help & support'}).click();
   await expect(page.getByRole('heading',{name:'Help & support'})).toBeVisible();
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   await expect(page.getByRole('link',{name:'Open scanner'})).toHaveAttribute('href','/scan');
   await page.goto('/profile');
   await page.getByRole('button',{name:'Delete account…'}).click();
