@@ -6,21 +6,10 @@ $apiOutLog = Join-Path $localDirectory 'dev-api.out.log'
 $apiErrLog = Join-Path $localDirectory 'dev-api.err.log'
 $apiProcess = $null
 $apiReady = $false
+. (Join-Path $PSScriptRoot 'dev-ports.ps1')
 
 function Test-ApiReady($Health) {
   return $Health.status -eq 'ready' -and $Health.database -eq 'connected' -and $Health.migrations -eq 'current'
-}
-
-function Test-PortAvailable([int]$Port) {
-  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
-  try {
-    $listener.Start()
-    return $true
-  } catch {
-    return $false
-  } finally {
-    $listener.Stop()
-  }
 }
 
 New-Item -ItemType Directory -Force -Path $localDirectory | Out-Null
@@ -72,13 +61,7 @@ if (-not $apiReady) {
   throw "LossFit API/database did not become ready at http://127.0.0.1:3001. Check '$apiErrLog' and run scripts/setup-windows.ps1 if the local database is stopped."
 }
 
-$frontendPort = 5173
-while ($frontendPort -le 5193 -and -not (Test-PortAvailable $frontendPort)) {
-  $frontendPort++
-}
-if ($frontendPort -gt 5193) {
-  throw 'No free frontend port is available in the range 5173-5193. Stop an old LossFit/Vite process and rerun scripts/start-dev.ps1.'
-}
+$frontendPort = Get-LossFitFrontendPort
 
 Write-Host 'LossFit API ready; PostgreSQL is connected.'
 Write-Host "Frontend: http://127.0.0.1:$frontendPort"
