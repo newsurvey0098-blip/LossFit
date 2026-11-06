@@ -56,6 +56,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.goto('/analytics');
   await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
   await checkResponsive(page,'analytics',info);
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
 
   await page.goto('/assistant');
   await checkResponsive(page,'assistant',info);
@@ -99,6 +100,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await foodResult.click();
   await expect(page.getByRole('heading',{level:1,name:'Browser test oatmeal'})).toBeVisible();
   await checkResponsive(page,'food-detail',info);
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   await page.getByLabel('Choose a serving').selectOption('1 bowl');
   await expect(page.getByLabel('Portion size (grams)')).toHaveValue('150');
   await expect(page.getByText('225.0 kcal')).toBeVisible();
@@ -149,6 +151,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
   await expect(page.getByText('225 kcal')).toBeVisible();
   await checkResponsive(page,'meal-detail',info);
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
 
   const detailUrl=page.url();
   await page.reload();
@@ -188,6 +191,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('heading',{name:'Check detected foods'})).toBeVisible();
   await checkResponsive(page,'scanner-review',info);
   await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCSS('position','relative');
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   await expect(page.getByRole('heading',{level:3,name:'Browser test oatmeal'})).toBeVisible();
   const scannerMatch=page.getByLabel('Match a catalogue food');
   const privateFoodOption=scannerMatch.locator('option').filter({hasText:'Browser test oatmeal'}).first();
