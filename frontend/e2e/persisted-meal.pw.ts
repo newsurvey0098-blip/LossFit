@@ -94,6 +94,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('status')).toContainText('Food saved to your private catalogue.');
 
   await page.goto('/foods');
+  await expect(page.getByRole('link',{name:/^Browser test oatmeal cooked/})).toBeVisible();
   await checkResponsive(page,'foods',info);
   await page.getByLabel('Search foods').fill('Browser test oatmeal');
   const foodResult=page.getByRole('link',{name:/^Browser test oatmeal cooked/});
@@ -153,8 +154,12 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByText('225 kcal')).toBeVisible();
   await checkResponsive(page,'meal-detail',info);
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
-
   const detailUrl=page.url();
+  await page.goto('/home');
+  await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
+  await checkResponsive(page,'dashboard-with-meal',info);
+  await page.goto(detailUrl);
+
   await page.reload();
   await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
   await expect(page.getByText('225 kcal')).toBeVisible();
