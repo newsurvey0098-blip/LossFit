@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 async function checkResponsive(page: import('@playwright/test').Page, screenName:string, info:import('@playwright/test').TestInfo){
   await expect(page.locator('main#main-content:not(.app-bootstrap)')).toBeVisible({timeout:15000});
-  for(const [width,height] of [[320,800],[390,844],[768,1024],[1440,900]]){
+  for(const [width,height] of [[320,800],[390,844],[720,900],[768,1024],[1440,900]]){
     await page.setViewportSize({width,height});
     const layout=await page.evaluate(()=>{const main=document.querySelector('main#main-content')!;const dock=document.querySelector('nav.bottom');return {viewport:window.innerWidth,document:document.documentElement.scrollWidth,mainWidth:main.clientWidth,mainContent:main.scrollWidth,mainBottom:main.getBoundingClientRect().bottom,dockTop:dock?.getBoundingClientRect().top??null,offenders:[...main.querySelectorAll('*')].map(element=>({tag:element.tagName.toLowerCase(),className:typeof element.className==='string'?element.className:'',text:(element.textContent??'').trim().slice(0,50),right:Math.round(element.getBoundingClientRect().right)})).filter(element=>element.right>main.getBoundingClientRect().right+1).slice(0,6)}});
     expect(layout.document<=layout.viewport&&layout.mainContent<=layout.mainWidth,`${screenName} overflows horizontally at ${width}px: ${JSON.stringify(layout.offenders)}`).toBe(true);
