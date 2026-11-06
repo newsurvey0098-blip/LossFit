@@ -489,9 +489,12 @@ def test_clear_all_conversations_only_clears_current_account():
         register(owner);register(other)
         h1={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
         h2={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']}
-        owner.post('/api/v1/assistant/conversations',headers=h1);other.post('/api/v1/assistant/conversations',headers=h2)
+        conversation=owner.post('/api/v1/assistant/conversations',headers=h1).json();other.post('/api/v1/assistant/conversations',headers=h2)
+        pending=owner.post('/api/v1/assistant/actions/preview',headers=h1,json={"conversation_id":conversation['id'],"action":"log_water","water_ml":250,"idempotency_key":uuid4().hex}).json()
         assert owner.delete('/api/v1/assistant/conversations',headers=h1).status_code==204
         assert owner.get('/api/v1/assistant/conversations').json()==[]
+        assert owner.post(f"/api/v1/assistant/actions/{pending['id']}/confirm",headers=h1).status_code==404
+        assert owner.get('/api/v1/analytics/daily').json()['water_ml']==0
         assert len(other.get('/api/v1/assistant/conversations').json())==1
 
 def test_assistant_uses_actual_user_context_and_persists_reply(monkeypatch):
