@@ -171,6 +171,13 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.goto('/home');
   await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
   await checkResponsive(page,'dashboard-with-meal',info);
+  const dashboardMeal=page.getByRole('heading',{name:'Persisted oatmeal breakfast'});
+  await dashboardMeal.scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath('dashboard-meal-section-390.png'),fullPage:false});
+  await page.setViewportSize({width:1440,height:900});
+  await dashboardMeal.scrollIntoViewIfNeeded();
+  await page.screenshot({path:info.outputPath('dashboard-meal-section-1440.png'),fullPage:false});
+  await page.setViewportSize({width:390,height:844});
   await page.goto(detailUrl);
 
   await page.reload();
