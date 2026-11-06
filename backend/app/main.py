@@ -19,7 +19,6 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response, Query, U
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast, text
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
@@ -32,8 +31,9 @@ from .knowledge import content_hash, chunk_document, request_embeddings, retriev
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
 from .branded_catalog import normalize_branded_food, normalize_search_hit
 from .recommendations import SUPPORTED_DIETS, normalize_diet, recommendation_eligibility
+from .environment import load_project_environment
 
-load_dotenv()
+load_project_environment(Path(__file__).resolve().parents[2])
 validate_production_environment(os.environ)
 APP_BASE_URL = configured_app_base_url(os.environ)
 APP_CORS_ORIGINS = configured_cors_origins(os.environ)
