@@ -1,6 +1,6 @@
 """Fail-closed deployment checks and origin helpers."""
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 
 _LOCAL_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -60,6 +60,20 @@ def _validate_https_origin(name, value):
         raise RuntimeError(f"Production {name} must contain explicit HTTPS origins")
 
 
+def _validate_database_url(env):
+    value = env.get("DATABASE_URL", "")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"postgresql", "postgresql+psycopg"}
+        or not parsed.hostname
+        or parsed.hostname.lower() in {"localhost", "127.0.0.1", "::1"}
+    ):
+        raise RuntimeError("Production requires a remote PostgreSQL DATABASE_URL")
+    sslmode = parse_qs(parsed.query).get("sslmode", [""])[0].lower()
+    if sslmode not in {"require", "verify-ca", "verify-full"}:
+        raise RuntimeError("Production DATABASE_URL must require TLS with sslmode=require or stronger")
+
+
 def validate_production_environment(env):
     """Validate production and preview deployments; local development stays simple."""
     deployment = env.get("VERCEL_ENV", "")
@@ -73,6 +87,8 @@ def validate_production_environment(env):
         value = env.get(name, "")
         if len(value) < 32 or value.lower().startswith(("replace", "local-only", "local-e2e", "change-me")):
             raise RuntimeError(f"Production requires a non-placeholder {name} of at least 32 characters")
+
+    _validate_database_url(env)
 
     origins = configured_cors_origins(env)
     base_url = configured_app_base_url(env)
@@ -95,3 +111,16 @@ def validate_production_environment(env):
         raise RuntimeError("Production requires private Blob storage or an explicitly configured durable upload directory")
     if not has_blob and not Path(upload_dir).is_absolute():
         raise RuntimeError("Production PRIVATE_UPLOAD_DIR must be an absolute persistent directory")
+
+
+def database_engine_options(env):
+    """Keep each serverless instance's client pool small and pooler-compatible."""
+    if env.get("VERCEL_ENV") in {"preview", "production"}:
+        return {
+            "pool_pre_ping": True,
+            "pool_size": 1,
+            "max_overflow": 0,
+            "pool_recycle": 1800,
+            "connect_args": {"prepare_threshold": None},
+        }
+    return {"pool_pre_ping": True}

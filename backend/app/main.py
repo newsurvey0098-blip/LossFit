@@ -25,7 +25,7 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
 from .monitoring import RequestMonitoring
-from .production import configured_app_base_url, configured_cors_origins, is_production_environment, is_secure_cookie_environment, validate_production_environment
+from .production import configured_app_base_url, configured_cors_origins, database_engine_options, is_production_environment, is_secure_cookie_environment, validate_production_environment
 from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
@@ -36,7 +36,7 @@ APP_BASE_URL = configured_app_base_url(os.environ)
 APP_CORS_ORIGINS = configured_cors_origins(os.environ)
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit")
 JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deploying")
-engine = create_engine(DB_URL, pool_pre_ping=True)
+engine = create_engine(DB_URL, **database_engine_options(os.environ))
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 hasher = PasswordHasher()
 
