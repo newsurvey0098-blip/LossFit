@@ -14,15 +14,25 @@ test('signed-out users can sign in to the requested private page at mobile and d
 
     await page.goto('/foods');
     await expect(page.getByRole('heading',{name:'Welcome back'})).toBeVisible();
+    await expect(page.locator('main#main-content')).toBeFocused();
     await page.screenshot({path:info.outputPath('login-390.png'),fullPage:true});
     await page.setViewportSize({width:1440,height:900});
     await page.screenshot({path:info.outputPath('login-1440.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});
     expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
     await expect(page.locator('nav[aria-label="Main navigation"]')).not.toBeVisible();
-    await page.getByLabel('Email').fill('lena@example.test');
-    await page.getByLabel('Password').fill('safe-password-987');
-    await page.getByRole('button',{name:'Sign in'}).click();
+    const email=page.getByLabel('Email');
+    const password=page.getByLabel('Password');
+    const signIn=page.getByRole('button',{name:'Sign in'});
+    await page.keyboard.press('Tab');
+    await expect(email).toBeFocused();
+    await page.keyboard.type('lena@example.test');
+    await page.keyboard.press('Tab');
+    await expect(password).toBeFocused();
+    await page.keyboard.type('safe-password-987');
+    await page.keyboard.press('Tab');
+    await expect(signIn).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/foods$/);
     await expect(page.getByRole('heading',{name:'Find your next meal'})).toBeVisible();
     await expect(page.locator('nav[aria-label="Main navigation"]')).toBeVisible();
