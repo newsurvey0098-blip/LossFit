@@ -1,0 +1,40 @@
+name: Production database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type migrate-production to apply the current Alembic migrations
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lossfit-production-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirm == 'migrate-production' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Apply and verify database migrations
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: |
+          if [ -z "$MIGRATION_DATABASE_URL" ]; then
+            echo "::error::Add MIGRATION_DATABASE_URL to the GitHub Actions production environment before dispatching this workflow."
+            exit 1
+          fi
+          python -m alembic -c backend/alembic.ini upgrade head
+          python -m alembic -c backend/alembic.ini current
