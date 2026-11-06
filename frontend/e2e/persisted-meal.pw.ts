@@ -66,10 +66,12 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Analytics period').selectOption('90');
   expect((await (await ninetyDayResponse).json()).days).toBe(90);
   const calorieChart=page.locator('.bar-chart');
+  await expect(calorieChart).toHaveAttribute('aria-label',/90 days/);
+  await expect.poll(()=>calorieChart.evaluate(element=>element.scrollWidth-element.clientWidth)).toBeGreaterThan(0);
   await calorieChart.evaluate(element=>{element.scrollLeft=0});
   await calorieChart.focus();
   await page.keyboard.press('ArrowRight');
-  expect(await calorieChart.evaluate(element=>element.scrollLeft)).toBeGreaterThan(0);
+  await expect.poll(()=>calorieChart.evaluate(element=>element.scrollLeft)).toBeGreaterThan(0);
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
 
   await page.goto('/assistant');
