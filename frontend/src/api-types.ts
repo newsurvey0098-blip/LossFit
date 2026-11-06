@@ -39,7 +39,7 @@ export interface components {
     "GoogleUnlinkIn": { "password": string; };
     "GoogleUnlinkedOut": { "linked": boolean; [key: string]: unknown; };
     "HTTPValidationError": { "detail"?: Array<components["schemas"]["ValidationError"]>; };
-    "HealthOut": { "status": string; "service"?: (string) | (null); "database"?: (string) | (null); [key: string]: unknown; };
+    "HealthOut": { "status": string; "service"?: (string) | (null); "database"?: (string) | (null); "migrations"?: (string) | (null); [key: string]: unknown; };
     "ImageURLOut": { "image_url": string; [key: string]: unknown; };
     "LabelExtraction": { "name"?: (string) | (null); "brand"?: (string) | (null); "serving_label"?: (string) | (null); "serving_grams"?: (number) | (null); "basis"?: "per_serving" | "per_100g" | "unknown"; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); };
     "LabelFoodIn": { "name": string; "brand"?: (string) | (null); "serving_label": string; "serving_grams": number; "basis"?: "per_serving" | "per_100g"; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); };

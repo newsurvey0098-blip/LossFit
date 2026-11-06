@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- On 2026-11-06, tightened `/api/v1/health/ready`: it now compares the database's applied Alembic heads with the packaged migration heads and returns 503 when the schema is absent or behind. The fresh isolated PostgreSQL suite passed 88/88, including current and stale-revision readiness cases; frontend tests passed 22/22, the production build succeeded, and all six local Chromium workflows passed on a fresh migrated database. Hosted CI verification is pending for this checkpoint.
+
 - On 2026-11-06, added `scripts/check-vercel-config.py` to CI to reject drift in the Services roots, FastAPI ASGI entrypoint, `/api/*` backend rewrite, and Vite SPA deep-link fallback. The local manifest check passed. This static contract check does not replace the account-level Vercel validator or a live deployment.
 
 - On 2026-11-06, separated Alembic from the hosted app runtime database role. `MIGRATION_DATABASE_URL` takes precedence for migrations, and production/preview migrations fail closed if it is absent; local and CI runs retain their disposable `DATABASE_URL`. The fresh isolated PostgreSQL suite passed 87/87, including tests for production rejection, migration URL precedence, and local fallback. GitHub Actions run [42188198468](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42188198468) passed all three hosted jobs after this change. Production migration credentials remain unconfigured and were not used against Supabase.

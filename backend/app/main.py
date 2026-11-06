@@ -20,9 +20,10 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast
+from sqlalchemy import create_engine, String, Text, Float, Boolean, DateTime, ForeignKey, JSON, select, func, delete, update, UniqueConstraint, or_, cast, text
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
+from alembic.script import ScriptDirectory
 from .learning import LESSONS, LESSON_BY_SLUG, public_lesson
 from .monitoring import RequestMonitoring
 from .production import configured_app_base_url, configured_cors_origins, database_engine_options, is_production_environment, is_secure_cookie_environment, validate_production_environment
@@ -39,6 +40,8 @@ JWT_SECRET = os.getenv("JWT_SECRET", "local-only-change-this-secret-before-deplo
 engine = create_engine(DB_URL, **database_engine_options(os.environ))
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 hasher = PasswordHasher()
+ALEMBIC_SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1] / "alembic"
+EXPECTED_MIGRATION_HEADS = tuple(sorted(ScriptDirectory(str(ALEMBIC_SCRIPT_DIRECTORY)).get_heads()))
 
 class Base(DeclarativeBase): pass
 class User(Base):
@@ -376,7 +379,7 @@ class DailySummaryOut(ApiResponse):
 class AnalyticsDayOut(ApiResponse):date:date;totals:NutrientTotalsOut;meal_count:int
 class AnalyticsWeightOut(ApiResponse):weight_kg:float;recorded_at:datetime
 class AnalyticsRangeOut(ApiResponse):days:int;start_date:date;end_date:date;daily:list[AnalyticsDayOut];weights:list[AnalyticsWeightOut]
-class HealthOut(ApiResponse):status:str;service:str|None=None;database:str|None=None
+class HealthOut(ApiResponse):status:str;service:str|None=None;database:str|None=None;migrations:str|None=None
 class MessageOut(ApiResponse):message:str
 class GoogleStatusOut(ApiResponse):available:bool;linked:bool;email:EmailStr|None=None
 class GoogleUnlinkedOut(ApiResponse):linked:bool
@@ -514,7 +517,13 @@ def send_password_reset_email(email:str,reset_url:str):
 def live(): return {"status":"ok","service":"lossfit"}
 @app.get("/api/v1/health/ready",response_model=HealthOut)
 def ready(s:Session=Depends(db)):
-    try: s.execute(select(1)); return {"status":"ready","database":"connected"}
+    try:
+        s.execute(select(1))
+        applied_heads = set(s.scalars(text("SELECT version_num FROM alembic_version")).all())
+        if applied_heads != set(EXPECTED_MIGRATION_HEADS):
+            raise HTTPException(503,"Database migrations are not current")
+        return {"status":"ready","database":"connected","migrations":"current"}
+    except HTTPException: raise
     except Exception: raise HTTPException(503,"Database unavailable")
 @app.post("/api/v1/auth/register",status_code=201,response_model=AuthSessionOut,response_model_exclude_unset=True)
 def register(data:RegisterIn,request:Request,response:Response,s:Session=Depends(db)):

@@ -11,6 +11,16 @@ from backend.app.knowledge import cosine
 from backend.app.food_import import normalize_foundation_food
 from backend.app.deletion_ledger import export_ledger, verify_ledger
 
+def test_readiness_requires_current_migrations(monkeypatch):
+    with TestClient(app) as client:
+        ready=client.get('/api/v1/health/ready')
+        assert ready.status_code==200
+        assert ready.json()['migrations']=='current'
+        monkeypatch.setattr(main,'EXPECTED_MIGRATION_HEADS',('pending-migration',))
+        stale=client.get('/api/v1/health/ready')
+        assert stale.status_code==503
+        assert stale.json()['detail']=='Database migrations are not current'
+
 def register(client):
     suffix=uuid4().hex
     response=client.post('/api/v1/auth/register',json={"name":"Test User","email":f"{suffix}@gmail.com","password":"safe-password-987"})

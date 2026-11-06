@@ -3970,6 +3970,17 @@
               }
             ],
             "title": "Database"
+          },
+          "migrations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migrations"
           }
         },
         "additionalProperties": true,
