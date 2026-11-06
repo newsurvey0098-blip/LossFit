@@ -237,7 +237,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'More detail'}).click();
   await page.locator('input[name="answer"][value="1"]').check();
   await page.getByRole('button',{name:'Check answer'}).click();
-  await expect(page.getByRole('status')).toContainText('Correct.');
+  await expect(page.locator('.quiz-result[role="status"]')).toContainText('Correct.');
   await page.reload();
   await expect(page.getByText('Last result: 1/1')).toBeVisible();
   await page.getByRole('link',{name:/All lessons/}).click();
