@@ -16,12 +16,12 @@ try {
 
 try {
   $health = Invoke-RestMethod -Uri $readinessUrl -TimeoutSec 5
-  if ($health.status -ne 'ready' -or $health.database -ne 'connected') {
-    throw "API readiness reported status '$($health.status)' and database '$($health.database)'."
+  if ($health.status -ne 'ready' -or $health.database -ne 'connected' -or $health.migrations -ne 'current') {
+    throw "API readiness reported status '$($health.status)', database '$($health.database)', and migrations '$($health.migrations)'."
   }
   Write-Host 'API and database: ready (proxied through Vite).'
 } catch {
-  Write-Error "The API/database is unavailable through $readinessUrl. Check PostgreSQL and .local/dev-api.err.log. $($_.Exception.Message)" -ErrorAction Continue
+  Write-Error "The API is unavailable, the database is disconnected, or the server is running stale migrations. Check PostgreSQL and .local/dev-api.err.log. $($_.Exception.Message)" -ErrorAction Continue
   $failed = $true
 }
 
