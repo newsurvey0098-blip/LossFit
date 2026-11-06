@@ -426,7 +426,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.goto(assistantUrl);
   await page.getByLabel('Message the nutrition assistant').fill('Please log my weight as 68.4 kg');
   await page.getByRole('button',{name:'Send message'}).click();
-  await expect(page.getByText('Proposed weight: 68.4 kg')).toBeVisible({timeout:15000});
+  await expect(page.getByText('Proposed weight: 150.8 lb')).toBeVisible({timeout:15000});
   await expect(page.getByText('Nothing has been logged. Confirm to save this entry.')).toBeVisible();
   const pendingHistory=page.waitForResponse(response=>response.url().endsWith('/api/v1/weight')&&response.request().method()==='GET');
   await page.goto('/weight');
@@ -436,7 +436,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.goto(assistantUrl);
   await expect(page.getByRole('button',{name:'Confirm proposed entry'})).toBeVisible();
   await page.getByRole('button',{name:'Confirm proposed entry'}).click();
-  await expect(page.locator('article.bubble.assistant').filter({hasText:'Proposed weight: 68.4'}).getByRole('status')).toContainText('Entry confirmed and saved.');
+  await expect(page.locator('article.bubble.assistant').filter({hasText:'Proposed weight: 150.8 lb'}).getByRole('status')).toContainText('Entry confirmed and saved.');
   const weightHistoryAfter=page.waitForResponse(response=>response.url().endsWith('/api/v1/weight')&&response.request().method()==='GET');
   await page.goto('/weight');
   const afterRows=await (await weightHistoryAfter).json();

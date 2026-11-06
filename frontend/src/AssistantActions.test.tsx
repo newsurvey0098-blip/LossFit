@@ -22,15 +22,36 @@ describe('assistant action confirmation',()=>{
   });
   const user=userEvent.setup();render(<AssistantActionPanel conversationId={9}/>);
   await user.click(screen.getByRole('button',{name:'Log weight'}));
-  fireEvent.change(screen.getByLabelText('Weight'),{target:{value:'68.4'}});
+  fireEvent.change(screen.getByLabelText('Weight (kg)'),{target:{value:'68.4'}});
   await user.click(screen.getByRole('button',{name:'Preview'}));
-  expect(await screen.findByText(/Latest entry: 70 kg/)).toBeTruthy();
+  expect(await screen.findByText(/Latest entry: 70\.0 kg/)).toBeTruthy();
   expect(fetchMock).toHaveBeenCalledTimes(1);
   const request=JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
   expect(request).toMatchObject({action:'log_weight',weight_kg:68.4});
   await user.click(screen.getByRole('button',{name:'Confirm log'}));
   expect((await screen.findByRole('status')).textContent).toContain('Logged 68.4 kg. Your weight history and profile were updated.');
   expect(fetchMock).toHaveBeenCalledTimes(2);
+ });
+
+ it('shows imperial units and submits a canonical kilogram weight',async()=>{
+  fetchMock.mockImplementation(async(input:RequestInfo|URL)=>{
+   const path=String(input);
+   if(path.endsWith('/assistant/actions/preview'))return jsonResponse({id:'imperial-weight-action-123456',action:'log_weight',status:'pending',preview:{weight_kg:68.4,previous_weight_kg:70,recorded_at:'2026-11-06T12:00:00+00:00'},result:null});
+   if(path.endsWith('/assistant/actions/imperial-weight-action-123456/confirm'))return jsonResponse({id:'imperial-weight-action-123456',action:'log_weight',status:'confirmed',preview:{weight_kg:68.4},result:{weight_id:52,weight_kg:68.4}});
+   throw new Error(`Unexpected fetch ${path}`);
+  });
+  const user=userEvent.setup();render(<AssistantActionPanel conversationId={10} units="imperial"/>);
+  await user.click(screen.getByRole('button',{name:'Log weight'}));
+  const input=screen.getByLabelText('Weight (lb)') as HTMLInputElement;
+  expect(input.value).toBe('154.3');
+  fireEvent.change(input,{target:{value:'150.8'}});
+  await user.click(screen.getByRole('button',{name:'Preview'}));
+  expect(await screen.findByText('Log 150.8 lb?')).toBeTruthy();
+  expect(screen.getByText(/Latest entry: 154\.3 lb/)).toBeTruthy();
+  const request=JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+  expect(request.weight_kg).toBeCloseTo(68.4017294,5);
+  await user.click(screen.getByRole('button',{name:'Confirm log'}));
+  expect((await screen.findByRole('status')).textContent).toContain('Logged 150.8 lb.');
  });
 
  it('previews water without writing, then confirms once',async()=>{

@@ -1,5 +1,6 @@
 import React from 'react';
 import { api } from './api';
+import {displayWeight,storedWeight,weightLabel,Units} from './units';
 
 type FoodOption = {
   id: number;
@@ -123,10 +124,10 @@ function AssistantFoodPicker({
   );
 }
 
-export default function AssistantActionPanel({ conversationId }: { conversationId: number }) {
+export default function AssistantActionPanel({ conversationId,units='metric' }: { conversationId: number;units?:Units }) {
   const [kind, setKind] = React.useState<'log_water' | 'log_meal' | 'log_weight'>('log_water');
   const [waterMl, setWaterMl] = React.useState(250);
-  const [weightKg, setWeightKg] = React.useState(70);
+  const [weightValue, setWeightValue] = React.useState(()=>Number(displayWeight(70,units).toFixed(1)));
   const [mealName, setMealName] = React.useState('Meal from assistant');
   const [mealType, setMealType] = React.useState('snack');
   const [mealItems, setMealItems] = React.useState<DraftMealItem[]>(() => [{ id: crypto.randomUUID(), foodId: '', grams: 100 }]);
@@ -144,7 +145,7 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
     const request = kind === 'log_water'
       ? { conversation_id: conversationId, action: kind, water_ml: waterMl, idempotency_key: crypto.randomUUID() }
       : kind === 'log_weight'
-        ? { conversation_id: conversationId, action: kind, weight_kg: weightKg, idempotency_key: crypto.randomUUID() }
+        ? { conversation_id: conversationId, action: kind, weight_kg: storedWeight(weightValue,units), idempotency_key: crypto.randomUUID() }
         : {
           conversation_id: conversationId,
           action: kind,
@@ -171,7 +172,7 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
         return;
       }
       if (result.action === 'log_water') setNotice(`Logged ${result.result.water_ml} ml. Today’s water total is ${(result.preview.today_total_after_ml / 1000).toFixed(1)} L.`);
-      else if (result.action === 'log_weight') setNotice(`Logged ${result.result.weight_kg} kg. Your weight history and profile were updated.`);
+      else if (result.action === 'log_weight') setNotice(`Logged ${weightLabel(result.result.weight_kg,units)}. Your weight history and profile were updated.`);
       else setNotice(`${result.result.name} was added to your meal log. Calories: ${result.result.kcal == null ? 'unavailable' : `${Math.round(result.result.kcal)} kcal`}.`);
       setPreview(null);
     } catch (reason) {
@@ -213,11 +214,11 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
       {preview ? (
         <div className="action-preview" role="group" aria-label="Review action before confirmation">
           <div>
-            <b>{preview.action === 'log_water' ? `Log ${preview.preview.water_ml} ml of water?` : preview.action === 'log_weight' ? `Log ${preview.preview.weight_kg} kg?` : `Add “${preview.preview.name}” to your meal log?`}</b>
+            <b>{preview.action === 'log_water' ? `Log ${preview.preview.water_ml} ml of water?` : preview.action === 'log_weight' ? `Log ${weightLabel(preview.preview.weight_kg,units)}?` : `Add “${preview.preview.name}” to your meal log?`}</b>
             {preview.action === 'log_water' ? (
               <p className="muted">Today’s total will change from {preview.preview.today_total_before_ml} ml to {preview.preview.today_total_after_ml} ml ({preview.preview.local_date}).</p>
             ) : preview.action === 'log_weight' ? (
-              <p className="muted">{preview.preview.previous_weight_kg == null ? 'There is no previous weight entry.' : `Latest entry: ${preview.preview.previous_weight_kg} kg.`} This entry will be recorded at {new Date(preview.preview.recorded_at).toLocaleString()} and will update your profile weight.</p>
+              <p className="muted">{preview.preview.previous_weight_kg == null ? 'There is no previous weight entry.' : `Latest entry: ${weightLabel(preview.preview.previous_weight_kg,units)}.`} This entry will be recorded at {new Date(preview.preview.recorded_at).toLocaleString()} and will update your profile weight.</p>
             ) : (
               <>
                 <p className="muted">{preview.preview.meal_type} · {new Date(preview.preview.eaten_at).toLocaleString()}</p>
@@ -246,9 +247,9 @@ export default function AssistantActionPanel({ conversationId }: { conversationI
           </div>
           {kind === 'log_weight' ? (
             <form className="water-action-form" onSubmit={createPreview}>
-              <label htmlFor="assistant-weight-kg">Weight</label>
-              <input id="assistant-weight-kg" type="number" min={20} max={350} step={0.1} value={weightKg} onChange={(event) => setWeightKg(Number(event.target.value))} required/>
-              <span className="muted">kg</span>
+              <label htmlFor="assistant-weight">Weight ({units==='imperial'?'lb':'kg'})</label>
+              <input id="assistant-weight" type="number" min={Number(displayWeight(20.1,units).toFixed(1))} max={Number(displayWeight(350,units).toFixed(1))} step={0.1} value={weightValue} onChange={(event) => setWeightValue(Number(event.target.value))} required/>
+              <span className="muted">{units==='imperial'?'lb':'kg'}</span>
               <button className="button" disabled={busy}>{busy ? 'Preparing…' : 'Preview'}</button>
             </form>
           ) : kind === 'log_water' ? (
