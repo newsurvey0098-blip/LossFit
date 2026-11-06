@@ -2,7 +2,7 @@ name: LossFit CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/lossfit-verification]
   pull_request:
     branches: [main]
 
