@@ -10,6 +10,7 @@ from backend.app.production import (
     database_engine_options,
     validate_production_environment,
 )
+from backend.app.migration_config import configured_migration_database_url
 
 
 def valid():
@@ -141,3 +142,26 @@ def test_vercel_database_pool_is_serverless_and_transaction_pooler_compatible():
             assert connection.execute(text("select 1")).scalar_one() == 1
     finally:
         engine.dispose()
+
+
+def test_production_migrations_require_a_separate_database_role():
+    with pytest.raises(RuntimeError, match="separate MIGRATION_DATABASE_URL"):
+        configured_migration_database_url({
+            "ENVIRONMENT": "production",
+            "DATABASE_URL": "postgresql+psycopg://lossfit_app@pooler.example:6543/lossfit?sslmode=require",
+        })
+
+
+def test_migrations_prefer_the_separate_migration_connection():
+    runtime_url = "postgresql+psycopg://lossfit_app@pooler.example:6543/lossfit?sslmode=require"
+    migration_url = "postgresql+psycopg://postgres@db.example:5432/lossfit?sslmode=require"
+    assert configured_migration_database_url({
+        "ENVIRONMENT": "production",
+        "DATABASE_URL": runtime_url,
+        "MIGRATION_DATABASE_URL": migration_url,
+    }) == migration_url
+
+
+def test_local_migrations_keep_using_the_disposable_database_url():
+    local_url = "postgresql+psycopg://lossfit@127.0.0.1:55432/lossfit"
+    assert configured_migration_database_url({"DATABASE_URL": local_url}) == local_url

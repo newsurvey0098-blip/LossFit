@@ -3,8 +3,10 @@ import os
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 from backend.app.main import Base
+from backend.app.migration_config import configured_migration_database_url
 config=context.config
-if os.getenv("DATABASE_URL"): config.set_main_option("sqlalchemy.url",os.environ["DATABASE_URL"].replace("%","%%"))
+migration_url=configured_migration_database_url(os.environ)
+if migration_url: config.set_main_option("sqlalchemy.url",migration_url.replace("%","%%"))
 if config.config_file_name: fileConfig(config.config_file_name)
 target_metadata=Base.metadata
 def run_migrations_offline():
