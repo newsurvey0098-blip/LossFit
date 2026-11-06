@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- On 2026-11-07, pushed verification branch `codex/lossfit-verification` at `6ddbf242215466fc2922dd036db224f09ecc225c`. GitHub Actions run [42272882052](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42272882052) completed successfully across dependency audit, pgvector-enabled backend, frontend build/tests, and browser E2E. The backend job seeded embeddings before the new migration and verified sidecar backfill and cosine retrieval against PostgreSQL 16 with pgvector; the portable fallback remains covered locally. Vercel Preview deployments were disabled only for the branch push, verified that no Preview was created, then restored for both projects. Existing Production deployments and domains stayed unchanged; no Production deployment occurred.
+
 - On 2026-11-07, pinned every GitHub Action in CI and the gated production-migration workflow to immutable commit SHAs. Verified each SHA against its upstream release tag with `git ls-remote`, then reran `actionlint` v1.7.12 on both workflow files; both passed. `git diff --check` passed. The hosted pgvector migration job still awaits a push, and no Vercel deployment was made.
 
 - On 2026-11-07, validated the updated GitHub Actions workflow with `actionlint` v1.7.12. Downloaded the official Windows release archive to the temporary directory, verified its SHA-256 against the release checksums, and ran it against `.github/workflows/ci.yml` with no findings. The hosted pgvector migration job remains unrun until a push; no push or deployment was performed.
