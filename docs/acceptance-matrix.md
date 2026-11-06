@@ -1,0 +1,29 @@
+# LossFit acceptance status
+
+Updated 2026-11-06. This matrix reports implementation and verification separately. “Automated” means the listed local/API/browser tests passed; it does not establish live third-party availability, physical-device behavior, or a production deployment. Historical run details and commands are in [verification evidence](verification.md).
+
+| Feature or requirement | Implementation | Automated verification | Manual/live verification | Mocked, unavailable, or remaining |
+|---|---|---|---|---|
+| Account registration, login, sessions, onboarding, profile, and goals | Implemented | PostgreSQL API tests; fresh-database browser registration, login, onboarding, unit conversion, weight, and route restoration | Local Windows setup exercised | Clean-machine first-run setup branch remains unverified |
+| Password recovery and account deletion | Implemented | Single-use/expiry/session-revocation API tests; local TLS SMTP test server; browser reset forms, confirmed deletion, and post-delete login rejection | Local workflow verified | Public SMTP relay delivery is not configured |
+| Food catalogue, source provenance, variants, portions, private foods, favorites, and recipes | Implemented | 5,856 imported USDA Foundation/FNDDS records; API ownership/null/snapshot tests; browser private-food search/detail/serving/recipe edit/delete | One Open Food Facts live product lookup verified | Branded catalog import/refresh and record-by-record visual audit remain outstanding |
+| Meal entry, editing, deletion, local-date history, analytics, hydration, weight, and export | Implemented | Fresh-database API and browser workflows; serving scaling, reload persistence, CSV/JSON, and snapshot immutability tested | Local end-to-end workflow verified | Some alternative analytics/date filter states still need browser coverage |
+| Meal-photo scanner and private images | Implemented | Image validation/ownership API tests; browser upload, provider result review, private retrieval, confirmation, persistence, and deletion | Local Chromium widths and controls checked | Vision provider is deterministic in tests; no live vision credentials or physical camera verification |
+| Barcode lookup and nutrition-label photo/manual entry | Implemented | GTIN/source/null-value API tests; deterministic barcode and label-photo browser journeys | One live Open Food Facts record read | Live catalog stability, OCR accuracy/provider behavior, and camera hardware remain unverified |
+| Assistant history, retries, retrieval/citations, and confirmed actions | Implemented with bounded registered tools | API idempotency/privacy/action tests; browser send/reload/delete and confirm-before-write workflows | Local deterministic provider exercised | No live chat/embedding provider configured; only water and single-food meal tools are registered |
+| Learning content and persisted quiz progress | Implemented | Sourced lesson, ownership, answer, and progress API tests; browser lesson navigation and quiz submission | Local browser submission verified | Reload progress and every explanation level remain outstanding in browser verification |
+| Conversation deletion, private food management, nutrition export, and account deletion | Implemented | Owner-scoped API tests and authenticated browser CRUD/export/deletion; backup deletion-ledger restore drill | Local PostgreSQL backup restore/deletion replay verified | Existing backups retain data until their documented retention expires |
+| Meal reminders and Help | Implemented | Preference validation/persistence tests; browser save/reload and Help navigation; component notice/dismiss/disabled tests; axe scans | Local timezone behavior implemented | In-app notices only while this device has LossFit open; background push is not configured |
+| CSRF, secure cookies, authorization, rate limits, upload validation, and redacted monitoring | Implemented | Regression tests cover CSRF/origin, cookie attributes, private ownership, limits, invalid files, and sensitive-log redaction | Local security configuration and request paths exercised | No external penetration test or production proxy/TLS assessment |
+| Accessibility and responsive layouts | Implemented across shared shell and core screens | Axe WCAG 2/2.1 A/AA scans; keyboard skip link, focus, 320/390/768/1440px reflow; scanner hit-target checks | Welcome/reference images visually reviewed | Screen-reader testing, actual browser zoom, and desktop comparison of every screen remain outstanding |
+| Fresh install, migrations, backups, deployment, and monitoring | Implemented and documented | Empty-database migrations/tests; Windows setup rerun; backup restore drill; production build and health/readiness checks | Local Windows environment verified | No production deployment, external monitoring sink, real TLS proxy, or clean Windows machine verification |
+
+## Live integrations
+
+- **Open Food Facts:** one live read-only product response verified. Automated product journeys use an isolated compatible fixture.
+- **AI vision/chat/OCR/embeddings:** provider adapters, validation, failure handling, and evidence-based retrieval are implemented. Automated browser tests use deterministic local fakes; live credentials and provider behavior are unavailable/unverified.
+- **Google OAuth:** secure linking flow and state validation are API-tested. Live account linking is unavailable until operator credentials and an exact callback URL are configured.
+- **Email:** reset delivery is verified against a local TLS SMTP test server; public delivery is unverified until deployment credentials are provided.
+- **Push notifications:** not configured. Meal reminders are in-app and only run while LossFit stays open in the browser.
+
+LossFit is not declared production-ready or fully accepted while any required verification above remains outstanding. No deployment has been performed.
