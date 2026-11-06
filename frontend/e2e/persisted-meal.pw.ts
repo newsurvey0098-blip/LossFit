@@ -176,6 +176,41 @@ test('registration, onboarding, private food, and meal persist through the API',
   page.once('dialog',dialog=>dialog.accept());
   await page.getByRole('button',{name:'Delete meal',exact:true}).click();
   await expect(page).toHaveURL(/\/home$/);
+
+  await page.goto('/scan/barcode');
+  await page.getByLabel('Barcode number').fill('3017624010701');
+  await page.getByRole('button',{name:'Look up'}).click();
+  await expect(page.getByRole('heading',{name:'Browser test cocoa spread'})).toBeVisible();
+  await expect(page.getByText(/community-contributed/i)).toBeVisible();
+  await page.getByRole('button',{name:'Save to my private foods'}).click();
+  await expect(page.getByRole('status')).toContainText('Saved to your private food catalogue');
+  await page.getByLabel('Meal name').fill('Scanned cocoa spread snack');
+  await page.getByLabel('Portion weight (grams)').fill('50');
+  await page.getByLabel('Meal type').selectOption('snack');
+  await page.getByRole('button',{name:'Add to meal log'}).click();
+  await expect(page.getByRole('heading',{name:'Scanned cocoa spread snack'})).toBeVisible();
+  await expect(page.getByText('270 kcal · 3.1g protein · imported')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading',{name:'Scanned cocoa spread snack'})).toBeVisible();
+  const barcodeMealUrl=page.url();
+  await page.goto('/foods');
+  await page.getByLabel('Search foods').fill('Browser test cocoa spread');
+  await page.getByRole('link',{name:/^Browser test cocoa spread/}).click();
+  await expect(page.getByRole('link',{name:'ODbL'})).toHaveAttribute('href','https://opendatacommons.org/licenses/odbl/1-0/');
+  await page.goto(barcodeMealUrl);
+
+  await page.goto('/scan/label');
+  await expect(page.getByText('Photo text recognition is unavailable in this installation.')).toBeVisible();
+  await page.getByLabel('Food name').fill('Browser transcribed yogurt');
+  await page.getByLabel('Serving description').fill('1 pot');
+  await page.getByLabel('Serving weight in grams').fill('125');
+  await page.getByLabel('Calories (kcal)').fill('100');
+  await page.getByLabel('Protein (g)').fill('8');
+  await page.getByRole('button',{name:'Save label food'}).click();
+  await expect(page.getByRole('heading',{name:'Browser transcribed yogurt'})).toBeVisible();
+  await expect(page.getByText('80.0 kcal')).toBeVisible();
+  await expect(page.getByText('Fat: unavailable')).toBeVisible();
+
   await page.goto('/assistant');
   await page.getByRole('button',{name:'Start a conversation',exact:true}).click();
   await expect(page).toHaveURL(/\/assistant\/\d+$/);
@@ -218,14 +253,21 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Download JSON'}).click();
   const jsonFile=await jsonDownload;
   const exported=JSON.parse(await readFile((await jsonFile.path())!,'utf8'));
-  expect(exported.meals).toHaveLength(1);
-  expect(exported.meals[0].name).toBe('Edited oatmeal breakfast');
-  expect(exported.meals[0].nutrition.kcal).toBe(300);
+  expect(exported.meals).toHaveLength(2);
+  const exportedOatmeal=exported.meals.find((meal:{name:string})=>meal.name==='Edited oatmeal breakfast');
+  const exportedBarcode=exported.meals.find((meal:{name:string})=>meal.name==='Scanned cocoa spread snack');
+  expect(exportedOatmeal?.nutrition.kcal).toBe(300);
+  expect(exportedBarcode?.items[0].source_record_id).toBe('3017624010701');
+  expect(exportedBarcode?.nutrition.protein_g).toBeCloseTo(3.15);
   const csvDownload=page.waitForEvent('download');
   await page.getByRole('button',{name:'Download CSV'}).click();
   expect(await readFile((await (await csvDownload).path())!,'utf8')).toContain('Edited oatmeal breakfast');
 
   await page.goto(detailUrl);
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('button',{name:'Delete meal',exact:true}).click();
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto(barcodeMealUrl);
   page.once('dialog',dialog=>dialog.accept());
   await page.getByRole('button',{name:'Delete meal',exact:true}).click();
   await expect(page).toHaveURL(/\/home$/);

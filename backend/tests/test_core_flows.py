@@ -31,6 +31,63 @@ def test_registration_meal_snapshot_summary_and_export():
         assert len(client.get('/api/v1/privacy/export.json').json()['meals'])==1
         assert 'Lunch' in client.get('/api/v1/privacy/export.csv').text
 
+def test_barcode_gtin_validation_and_open_food_facts_lookup(monkeypatch):
+    product={"barcode":"3017624010701","name":"Hazelnut cocoa spread","brand":"Example Brand","quantity":"350 g","category":"Spreads","nutrition_per":"100 g","nutrients":{"kcal":539.0,"protein":6.3,"carbs":57.5,"fat":30.9},"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":"3017624010701","source_url":"https://world.openfoodfacts.org/product/3017624010701","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
+    monkeypatch.setattr(main,"fetch_open_food_facts",lambda code:{**product,"barcode":code,"source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}"})
+    with TestClient(app) as client:
+        register(client)
+        assert client.get('/api/v1/barcodes/3017624010702').status_code==422
+        assert client.get('/api/v1/barcodes/abc3017624010701').status_code==422
+        found=client.get('/api/v1/barcodes/3017624010701')
+        assert found.status_code==200 and found.json()['verification']=='imported'
+        assert found.json()['nutrients']['kcal']==539
+
+def test_barcode_import_preserves_missing_values_source_and_owner_isolation(monkeypatch):
+    product={"barcode":"3017624010701","name":"Imported cocoa spread","brand":"Example Brand","quantity":"350 g","category":"Spreads","nutrition_per":"100 g","nutrients":{"kcal":539.0,"protein":None,"carbs":57.5,"fat":None},"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":"3017624010701","source_url":"https://world.openfoodfacts.org/product/3017624010701","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
+    calls=[]
+    def lookup(code):calls.append(code);return {**product,"barcode":code,"source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}"}
+    monkeypatch.setattr(main,"fetch_open_food_facts",lookup)
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);register(other)
+        headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        imported=owner.post('/api/v1/barcodes/3017624010701/import',headers=headers,json={}).json()
+        assert imported['verification']=='imported' and imported['source_record_id']=='3017624010701'
+        assert imported['protein'] is None and imported['fat'] is None
+        assert 'not zero' in imported['data_notes']
+        assert imported['nutrition_provenance']['kcal']['status']=='imported'
+        assert owner.get(f"/api/v1/foods/{imported['id']}").status_code==200
+        assert other.get(f"/api/v1/foods/{imported['id']}").status_code==404
+        meal=owner.post('/api/v1/meals',headers=headers,json={"name":"Imported breakfast","meal_type":"breakfast","items":[{"food_id":imported['id'],"grams":25}]}).json()
+        assert meal['items'][0]['source_record_id']=='3017624010701'
+        assert meal['items'][0]['per100']['protein'] is None
+        updated=owner.post('/api/v1/barcodes/3017624010701/import',headers=headers,json={})
+        assert updated.status_code==201 and updated.json()['id']==imported['id'] and len(calls)==1
+        assert owner.delete(f"/api/v1/foods/{imported['id']}",headers=headers).status_code==204
+        historical=owner.get(f"/api/v1/meals/{meal['id']}").json()
+        assert historical['items'][0]['source_record_id']=='3017624010701'
+
+def test_barcode_catalogue_outage_is_explicit(monkeypatch):
+    def unavailable(_code):raise main.HTTPException(503,"The product catalogue is temporarily unavailable. Try again later.")
+    monkeypatch.setattr(main,"fetch_open_food_facts",unavailable)
+    with TestClient(app) as client:
+        register(client)
+        response=client.get('/api/v1/barcodes/3017624010701')
+        assert response.status_code==503 and response.json()['detail'].startswith('The product catalogue')
+
+def test_label_values_are_converted_server_side_and_keep_unknown_nutrients(monkeypatch):
+    with TestClient(app) as client:
+        register(client);headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
+        invalid=client.post('/api/v1/foods/from-label',headers=headers,json={"name":"Label food","serving_label":"1 cup","serving_grams":50,"kcal":100,"protein":1,"carbs":1,"fat":1})
+        assert invalid.status_code==201
+        food=invalid.json()
+        assert food['kcal']==200 and food['protein']==2 and food['carbs']==2 and food['fat']==2
+        assert food['verification']=='user_provided' and food['nutrition_provenance']['kcal']['status']=='user_provided'
+        assert next(row for row in food['servings'] if row['label']=='1 cup')['grams']==50
+        missing=client.post('/api/v1/foods/from-label',headers=headers,json={"name":"Partial label","serving_label":"1 pot","serving_grams":125,"kcal":100,"protein":8,"carbs":None,"fat":None}).json()
+        assert missing['kcal']==80 and missing['carbs'] is None and missing['fat'] is None
+        too_high=client.post('/api/v1/foods/from-label',headers=headers,json={"name":"Bad units","serving_label":"1 scoop","serving_grams":1,"kcal":200,"protein":1,"carbs":1,"fat":1})
+        assert too_high.status_code==422
+
 def test_cookie_mutations_require_csrf_and_origin():
     with TestClient(app) as client:
         register(client)
@@ -167,6 +224,8 @@ def test_assistant_meal_action_previews_catalogue_snapshot_then_commits_once():
 
 def test_remaining_auth_scanner_and_assistant_rate_limits_are_enforced(monkeypatch):
     monkeypatch.setattr(main,'request_ip',lambda request:'dedicated-rate-limit-regression-client')
+    fixture={"barcode":"3017624010701","name":"Rate limit fixture","brand":None,"quantity":None,"category":None,"nutrition_per":"100 g","nutrients":{"kcal":None,"protein":None,"carbs":None,"fat":None},"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":"3017624010701","source_url":"https://world.openfoodfacts.org/product/3017624010701","data_notes":"Fixture"}
+    monkeypatch.setattr(main,'fetch_open_food_facts',lambda code:{**fixture,"barcode":code,"source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}"})
     monkeypatch.setenv('GOOGLE_CLIENT_ID','test-client.apps.googleusercontent.com');monkeypatch.setenv('GOOGLE_CLIENT_SECRET','test-secret');monkeypatch.setenv('GOOGLE_REDIRECT_URI','http://127.0.0.1:3001/api/v1/auth/google/callback')
     with TestClient(app) as client:
         user=register(client);headers={"origin":"http://localhost:5173","x-csrf-token":client.cookies['lf_csrf']}
@@ -192,6 +251,8 @@ def test_remaining_auth_scanner_and_assistant_rate_limits_are_enforced(monkeypat
         assert confirm_statuses==[404]*30+[429]
         google_statuses=[protected_post('/api/v1/auth/google/link/start',json={"password":"safe-password-987"}).status_code for _ in range(6)]
         assert google_statuses==[200]*5+[429]
+        barcode_statuses=[client.get('/api/v1/barcodes/3017624010701').status_code for _ in range(21)]
+        assert barcode_statuses==[200]*20+[429]
 
 def test_assistant_action_preview_is_private_cancelable_and_rechecked_before_write():
     with TestClient(app) as owner,TestClient(app) as other:

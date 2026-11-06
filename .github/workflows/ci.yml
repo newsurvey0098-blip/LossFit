@@ -81,6 +81,7 @@ jobs:
       AI_API_KEY: local-e2e-vision-key
       AI_MODEL: deterministic-local-test
       VISION_MODEL: deterministic-local-test
+      OPEN_FOOD_FACTS_BASE_URL: http://127.0.0.1:3002
       E2E_VISION_PORT: "3002"
     steps:
       - uses: actions/checkout@v4

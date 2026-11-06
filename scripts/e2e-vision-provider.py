@@ -2,11 +2,18 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+from urllib.parse import urlparse
 
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path != "/health":
+        path=urlparse(self.path).path
+        if path == "/api/v3/product/3017624010701.json":
+            if not self.headers.get("User-Agent","").startswith("LossFit/"):
+                self.send_error(400);return
+            payload={"code":"3017624010701","status":"success","product":{"product_name":"Browser test cocoa spread","brands":"Example Brand","quantity":"350 g","categories":"Spreads","nutrition_data_per":"100g","nutriments":{"energy-kcal_100g":539,"proteins_100g":6.3,"carbohydrates_100g":57.5,"fat_100g":30.9}}}
+            encoded=json.dumps(payload).encode();self.send_response(200);self.send_header("Content-Type","application/json");self.send_header("Content-Length",str(len(encoded)));self.end_headers();self.wfile.write(encoded);return
+        if path != "/health":
             self.send_error(404)
             return
         self.send_response(200)

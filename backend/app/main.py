@@ -271,6 +271,16 @@ class FoodIn(BaseModel):
         if bool(self.serving_label)!=bool(self.serving_grams):raise ValueError("Serving label and grams must be provided together")
         return self
 class FoodServingIn(BaseModel): label:str=Field(min_length=1,max_length=100);grams:float=Field(gt=0,le=10000,allow_inf_nan=False)
+class BarcodeImportIn(BaseModel):
+    name:str|None=Field(default=None,min_length=1,max_length=160)
+class LabelFoodIn(BaseModel):
+    name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*")
+    serving_label:str=Field(min_length=1,max_length=100,pattern=r".*\S.*")
+    serving_grams:float=Field(gt=0,le=10000,allow_inf_nan=False)
+    kcal:float|None=Field(default=None,ge=0,le=10000,allow_inf_nan=False)
+    protein:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
+    carbs:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
+    fat:float|None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
 class ScanCandidateIn(BaseModel): name:str=Field(min_length=1,max_length=160);grams:float=Field(default=100,ge=1,le=5000,allow_inf_nan=False)
 class ScanConfirmItemIn(BaseModel): candidate_id:str|None=Field(default=None,max_length=64);food_id:int;grams:float=Field(gt=0,le=10000,allow_inf_nan=False);portion_label:str|None=Field(default=None,max_length=100)
 class ScanConfirmIn(BaseModel): name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*");meal_type:str=Field(pattern="^(breakfast|lunch|dinner|snack)$");items:list[ScanConfirmItemIn]=Field(max_length=50);removed_candidate_ids:list[str]=Field(default_factory=list,max_length=12)
@@ -589,6 +599,69 @@ def accessible_food(food_id:int,s:Session,u:User)->Food:
     if not food:raise HTTPException(404,"Food not found")
     return food
 
+def normalize_gtin(raw:str)->str:
+    if len(raw)>32 or not re.fullmatch(r"[0-9][0-9 -]*",raw):raise HTTPException(422,"Enter a valid 8, 12, 13, or 14 digit product barcode")
+    code=raw.replace(" ","").replace("-","")
+    if len(code) not in {8,12,13,14}:raise HTTPException(422,"Enter a valid 8, 12, 13, or 14 digit product barcode")
+    body=code[:-1]
+    total=sum(int(digit)*(3 if offset%2==0 else 1) for offset,digit in enumerate(reversed(body)))
+    if (10-total%10)%10!=int(code[-1]):raise HTTPException(422,"The barcode check digit is invalid")
+    return code
+
+def fetch_open_food_facts(code:str)->dict:
+    base=os.getenv("OPEN_FOOD_FACTS_BASE_URL","https://world.openfoodfacts.org").rstrip("/")
+    url=f"{base}/api/v3/product/{code}.json"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(7,connect=3),follow_redirects=False) as client:
+            with client.stream("GET",url,params={"fields":"code,product_name,brands,quantity,nutrition_data_per,nutriments,categories"},headers={"User-Agent":"LossFit/0.1.0 (https://github.com/newsurvey0098-blip/LossFit)"}) as response:
+                if response.status_code!=200:raise HTTPException(503,"The product catalogue is temporarily unavailable. Try again later.")
+                content=bytearray()
+                for chunk in response.iter_bytes():
+                    content.extend(chunk)
+                    if len(content)>1_000_000:raise HTTPException(502,"The product catalogue response was too large")
+        payload=json.loads(content)
+        product=payload.get("product") if isinstance(payload,dict) else None
+        status=payload.get("status") if isinstance(payload,dict) else None
+        if not isinstance(product,dict) or str(product.get("code") or payload.get("code") or "")!=code or status not in (None,1,"success"):
+            raise HTTPException(404,"No product is listed for that barcode. You can add it manually.")
+        if str(product.get("nutrition_data_per") or "").strip().casefold() not in {"100g","per 100g"}:
+            raise HTTPException(422,"This product uses nutrition per 100 ml. LossFit cannot convert that safely to grams; add the label values manually.")
+        name=" ".join(str(product.get("product_name") or "").split())
+        if not name or len(name)>160:raise HTTPException(422,"The product record has no usable name. Add it manually instead.")
+        raw_nutrients=product.get("nutriments") if isinstance(product.get("nutriments"),dict) else {}
+        values={}
+        for key,field in (("kcal","energy-kcal_100g"),("protein","proteins_100g"),("carbs","carbohydrates_100g"),("fat","fat_100g")):
+            value=raw_nutrients.get(field)
+            try:
+                number=float(value)
+                if not 0<=number<=10000:raise ValueError()
+                values[key]=number
+            except (TypeError,ValueError):values[key]=None
+        category=" ".join(str(product.get("categories") or "").split(";")[0].split())[:80] or None
+        return {"barcode":code,"name":name,"brand":" ".join(str(product.get("brands") or "").split())[:120] or None,"quantity":" ".join(str(product.get("quantity") or "").split())[:80] or None,"category":category,"nutrition_per":"100 g","nutrients":values,"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
+    except HTTPException:raise
+    except (httpx.HTTPError,ValueError,TypeError,KeyError):raise HTTPException(503,"The product catalogue is temporarily unavailable. Try again later.")
+
+@app.get("/api/v1/barcodes/{raw_code}")
+def lookup_barcode(raw_code:str,s:Session=Depends(db),u:User=Depends(current_user)):
+    code=normalize_gtin(raw_code)
+    enforce_rate_limit(s,"barcode_lookup_user",str(u.id),20,600)
+    return fetch_open_food_facts(code)
+
+@app.post("/api/v1/barcodes/{raw_code}/import",status_code=201)
+def import_barcode(raw_code:str,data:BarcodeImportIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    code=normalize_gtin(raw_code)
+    enforce_rate_limit(s,"barcode_import_user",str(u.id),10,3600)
+    existing=s.scalar(select(Food).where(Food.owner_id==u.id,Food.source=="Open Food Facts community-contributed product data",Food.source_record_id==code))
+    if existing:return food_payload(existing,s)
+    product=fetch_open_food_facts(code)
+    provenance={key:{"status":"imported","source":product["source"],"source_url":product["source_url"],"source_record_id":code} for key,value in product["nutrients"].items() if value is not None}
+    food=Food(owner_id=u.id,name=(data.name or product["name"]).strip(),state="packaged",brand=product["brand"],category=product["category"],aliases=[code],verification="imported",source=product["source"],source_record_id=code,source_url=product["source_url"],nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes=product["data_notes"],kcal=product["nutrients"]["kcal"],protein=product["nutrients"]["protein"],carbs=product["nutrients"]["carbs"],fat=product["nutrients"]["fat"])
+    s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"))
+    try:s.commit();s.refresh(food)
+    except Exception:s.rollback();raise
+    return food_payload(food,s)
+
 def queue_private_file_cleanup(s:Session,private_path:str):
     s.add(PrivateFileCleanup(private_path=private_path))
 
@@ -689,6 +762,15 @@ def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     s.add(f);s.flush();s.add(FoodServing(food_id=f.id,label="100 g",grams=100,source="standard"))
     if data.serving_label and data.serving_grams:s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
+@app.post("/api/v1/foods/from-label",status_code=201)
+def add_label_food(data:LabelFoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
+    per100={key:(None if value is None else round(value*100/data.serving_grams,6)) for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat))}
+    if per100["kcal"] is not None and per100["kcal"]>10000 or any(per100[key] is not None and per100[key]>1000 for key in ("protein","carbs","fat")):
+        raise HTTPException(422,"Those serving values are too high for the serving weight; check the label units")
+    source="Packaging label, transcribed by user"
+    provenance={key:{"status":"user_provided","source":source,"derivation":f"Transcribed per {data.serving_grams:g} g serving and converted to per 100 g"} for key,value in per100.items() if value is not None}
+    food=Food(owner_id=u.id,name=data.name.strip(),state="packaged",category="Packaged food",aliases=[],verification="user_provided",source=source,nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes="Nutrition values were transcribed from the package by the user; LossFit has not independently verified the label.",**per100)
+    s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"));s.add(FoodServing(food_id=food.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"));s.commit();s.refresh(food);return food_payload(food,s)
 @app.put("/api/v1/foods/{food_id}")
 def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
