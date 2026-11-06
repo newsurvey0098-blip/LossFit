@@ -44,12 +44,15 @@ function PrivateShell(){return <Shell><ReminderNotice/><Outlet/></Shell>}
 
 function Dashboard() {
   const [summary,setSummary]=React.useState<any>(null);
+  const [recommendations,setRecommendations]=React.useState<any>(null);
+  const [recommendationError,setRecommendationError]=React.useState('');
   const [name,setName]=React.useState('there');
   const [water,setWater]=React.useState(0);
   const [busy,setBusy]=React.useState(true);
   const [error,setError]=React.useState('');
   React.useEffect(()=>{
     let active=true;
+    api('/recommendations/daily').then(value=>active&&setRecommendations(value)).catch((e:Error)=>active&&setRecommendationError(e.message));
     Promise.all([api('/analytics/daily'),api('/auth/me')]).then(([daily,user]:any[])=>{
       if(!active)return;setSummary(daily);setWater(daily.water_ml/1000);setName(user.name||'there');
     }).catch((e:Error)=>active&&setError(e.message)).finally(()=>active&&setBusy(false));
@@ -71,6 +74,7 @@ function Dashboard() {
         </article>
       </section>
       <section className="card water"><div className="watericon"><Droplets size={20}/></div><div className="watermain"><div className="sectionhead"><div><p className="eyebrow">HYDRATION</p><h2>{water.toFixed(1)} <span className="muted">/ 3.5 L</span></h2></div><span className="muted">Daily goal</span></div><div className="track"><div className="blue" style={{width:`${Math.min(water/3.5*100,100)}%`}}/></div><div className="wateractions">{[250,500,750].map(ml=><button key={ml} className="chip" onClick={()=>addWater(ml)}><Plus size={13}/>{ml} ml</button>)}</div></div></section>
+      <section className="card simple" aria-labelledby="daily-suggestions-title"><div className="sectionhead"><div><p className="eyebrow">PERSONALIZED IDEAS</p><h2 id="daily-suggestions-title">Suggestions for today</h2></div><span className="pill">Based on your log</span></div>{recommendationError?<p className="error" role="alert">Suggestions are unavailable right now. Your food log still works.</p>:!recommendations?<p className="muted" role="status">Finding catalogue options…</p>:<><p className="muted">{recommendations.message}</p>{recommendations.items?.length>0&&<div className="mealgrid">{recommendations.items.map((item:any)=><Link className="card meal" key={item.food_id} to={`/foods/${item.food_id}`}><div className="mealemoji" aria-hidden="true">🥗</div><div className="mealcontent"><h3>{item.name}</h3><p className="muted">{item.reason}</p><div className="nutrients"><span>{item.kcal==null?'Calories unavailable':`${Math.round(item.kcal*item.serving_grams/100)} kcal`}</span><span>Protein <b>{item.protein==null?'—':(item.protein*item.serving_grams/100).toFixed(1)}g</b></span><span>{item.serving_label} · {item.serving_grams}g</span></div><small className="muted">{item.verification.replace('_',' ')}{item.source?` · ${item.source}`:''}</small></div><ChevronRight size={17} className="chev"/></Link>)}</div>}{recommendations.caution&&<p className="integration-note" role="note">{recommendations.caution}</p>}</>}</section>
       <div className="sectionhead meals-title"><div><p className="eyebrow">{summary?.date?new Date(`${summary.date}T12:00:00`).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}).toUpperCase():'TODAY'}</p><h2>Today’s meals</h2></div><Link className="textlink" to="/log">Full food log <ArrowRight size={15}/></Link></div>
       <div className="mealgrid">{(summary?.meals??[]).map((meal:any)=><Link to={`/meals/${meal.id}`} className="card meal" key={meal.id}><div className="mealemoji" aria-hidden="true">🍽️</div><div className="mealcontent"><div className="mealrow"><h3>{meal.name}</h3><span className="kcal">{meal.kcal==null?'—':Math.round(meal.kcal)} kcal</span></div><p className="muted">{meal.meal_type}</p><div className="nutrients"><span><b>{meal.protein??'—'}g</b> protein</span><span><b>{meal.carbs??'—'}g</b> carbs</span><span><b>{meal.fat??'—'}g</b> fat</span></div></div><ChevronRight size={17} className="chev"/></Link>)}</div>
       {!summary?.meals?.length&&<section className="card simple"><p className="muted">No meals logged yet today.</p><Link className="button primary" to="/meals/new">Add your first meal</Link></section>}

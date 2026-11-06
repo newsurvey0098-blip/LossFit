@@ -97,6 +97,7 @@ def normalize_branded_food(record: dict[str, Any]) -> dict[str, Any]:
     if isinstance(category_value, dict):
         category_value = category_value.get("description")
     category = _clean_text(category_value, 80)
+    ingredients = _clean_text(record.get("ingredients"), 3000)
     servings = []
     serving_size = record.get("servingSize")
     serving_unit = (record.get("servingSizeUnit") or "").strip().casefold() if isinstance(record.get("servingSizeUnit"), str) else ""
@@ -112,6 +113,7 @@ def normalize_branded_food(record: dict[str, Any]) -> dict[str, Any]:
         "state": "prepared",
         "brand": _clean_text(record.get("brandName") or record.get("brandOwner"), 120),
         "category": category,
+        "ingredients": ingredients,
         "verification": "imported",
         "source": SOURCE,
         "source_record_id": str(fdc_id),

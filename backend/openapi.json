@@ -1543,6 +1543,24 @@
         }
       }
     },
+    "/api/v1/recommendations/daily": {
+      "get": {
+        "summary": "Daily Recommendations",
+        "operationId": "daily_recommendations_api_v1_recommendations_daily_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/range": {
       "get": {
         "summary": "Analytics Range",
@@ -3048,6 +3066,17 @@
             ],
             "title": "Category"
           },
+          "ingredients": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredients"
+          },
           "nutrition_per": {
             "type": "string",
             "title": "Nutrition Per"
@@ -3617,6 +3646,18 @@
             "maxItems": 24,
             "title": "Aliases"
           },
+          "ingredients": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredients"
+          },
           "serving_label": {
             "anyOf": [
               {
@@ -3703,6 +3744,17 @@
               }
             ],
             "title": "Recipe"
+          },
+          "ingredients": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredients"
           },
           "is_custom": {
             "type": "boolean",
@@ -4293,6 +4345,18 @@
               }
             ],
             "title": "Brand"
+          },
+          "ingredients": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingredients"
           },
           "serving_label": {
             "type": "string",
@@ -5465,6 +5529,149 @@
           "grams"
         ],
         "title": "RecipeIngredientIn"
+      },
+      "RecommendationItemOut": {
+        "properties": {
+          "food_id": {
+            "type": "integer",
+            "title": "Food Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "focus": {
+            "type": "string",
+            "title": "Focus"
+          },
+          "serving_label": {
+            "type": "string",
+            "title": "Serving Label"
+          },
+          "serving_grams": {
+            "type": "number",
+            "title": "Serving Grams"
+          },
+          "kcal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kcal"
+          },
+          "protein": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protein"
+          },
+          "carbs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carbs"
+          },
+          "fat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fat"
+          },
+          "verification": {
+            "type": "string",
+            "title": "Verification"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "food_id",
+          "name",
+          "reason",
+          "focus",
+          "serving_label",
+          "serving_grams",
+          "verification"
+        ],
+        "title": "RecommendationItemOut"
+      },
+      "RecommendationsOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "caution": {
+            "type": "string",
+            "title": "Caution"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "date",
+          "items",
+          "message",
+          "caution"
+        ],
+        "title": "RecommendationsOut"
       },
       "RegisterIn": {
         "properties": {

@@ -14,7 +14,7 @@ export interface components {
     "AuthorizationURLApiOut": { "authorization_url": string; [key: string]: unknown; };
     "BarcodeImportIn": { "name"?: (string) | (null); };
     "BarcodeNutrientsOut": { "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); [key: string]: unknown; };
-    "BarcodeProductOut": { "barcode": string; "name": string; "brand"?: (string) | (null); "quantity"?: (string) | (null); "category"?: (string) | (null); "nutrition_per": string; "nutrients": components["schemas"]["BarcodeNutrientsOut"]; "verification": string; "source": string; "source_record_id": string; "source_url": string; "data_notes": string; [key: string]: unknown; };
+    "BarcodeProductOut": { "barcode": string; "name": string; "brand"?: (string) | (null); "quantity"?: (string) | (null); "category"?: (string) | (null); "ingredients"?: (string) | (null); "nutrition_per": string; "nutrients": components["schemas"]["BarcodeNutrientsOut"]; "verification": string; "source": string; "source_record_id": string; "source_url": string; "data_notes": string; [key: string]: unknown; };
     "Body_analyze_label_api_v1_labels_analyze_post": { "image": string; };
     "Body_create_scan_api_v1_scans_post": { "image": string; };
     "Body_upload_food_image_api_v1_foods__food_id__image_post": { "image": string; };
@@ -28,8 +28,8 @@ export interface components {
     "ExportMealOut": { "meal_id": number; "name": string; "meal_type": string; "eaten_at": string; "items": Array<{ [key: string]: unknown; }>; "nutrition": components["schemas"]["ExportNutritionOut"]; [key: string]: unknown; };
     "ExportNutritionOut": { "kcal"?: (number) | (null); "protein_g"?: (number) | (null); "carbs_g"?: (number) | (null); "fat_g"?: (number) | (null); [key: string]: unknown; };
     "ExportUserOut": { "name": string; "email": string; [key: string]: unknown; };
-    "FoodIn": { "name": string; "state"?: string; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); "brand"?: (string) | (null); "category"?: (string) | (null); "aliases"?: Array<string>; "serving_label"?: (string) | (null); "serving_grams"?: (number) | (null); };
-    "FoodOut": { "id": number; "name": string; "state": string; "brand"?: (string) | (null); "category"?: (string) | (null); "aliases"?: Array<string>; "recipe"?: ({ [key: string]: unknown; }) | (null); "is_custom"?: boolean; "is_favorite"?: boolean; "verification": string; "source"?: (string) | (null); "source_record_id"?: (string) | (null); "source_url"?: (string) | (null); "nutrition_basis"?: (string) | (null); "nutrition_provenance"?: { [key: string]: { [key: string]: unknown; }; }; "data_notes"?: (string) | (null); "image_url"?: (string) | (null); "updated_at"?: (string) | (null); "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); "servings"?: Array<components["schemas"]["FoodServingOut"]>; [key: string]: unknown; };
+    "FoodIn": { "name": string; "state"?: string; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); "brand"?: (string) | (null); "category"?: (string) | (null); "aliases"?: Array<string>; "ingredients"?: (string) | (null); "serving_label"?: (string) | (null); "serving_grams"?: (number) | (null); };
+    "FoodOut": { "id": number; "name": string; "state": string; "brand"?: (string) | (null); "category"?: (string) | (null); "aliases"?: Array<string>; "recipe"?: ({ [key: string]: unknown; }) | (null); "ingredients"?: (string) | (null); "is_custom"?: boolean; "is_favorite"?: boolean; "verification": string; "source"?: (string) | (null); "source_record_id"?: (string) | (null); "source_url"?: (string) | (null); "nutrition_basis"?: (string) | (null); "nutrition_provenance"?: { [key: string]: { [key: string]: unknown; }; }; "data_notes"?: (string) | (null); "image_url"?: (string) | (null); "updated_at"?: (string) | (null); "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); "servings"?: Array<components["schemas"]["FoodServingOut"]>; [key: string]: unknown; };
     "FoodServingIn": { "label": string; "grams": number; };
     "FoodServingOut": { "id": number; "label": string; "grams": number; "source": string; [key: string]: unknown; };
     "FoodStatusOut": { "available": boolean; "message"?: (string) | (null); [key: string]: unknown; };
@@ -43,7 +43,7 @@ export interface components {
     "HealthOut": { "status": string; "service"?: (string) | (null); "database"?: (string) | (null); "migrations"?: (string) | (null); [key: string]: unknown; };
     "ImageURLOut": { "image_url": string; [key: string]: unknown; };
     "LabelExtraction": { "name"?: (string) | (null); "brand"?: (string) | (null); "serving_label"?: (string) | (null); "serving_grams"?: (number) | (null); "basis"?: "per_serving" | "per_100g" | "unknown"; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); };
-    "LabelFoodIn": { "name": string; "brand"?: (string) | (null); "serving_label": string; "serving_grams": number; "basis"?: "per_serving" | "per_100g"; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); };
+    "LabelFoodIn": { "name": string; "brand"?: (string) | (null); "ingredients"?: (string) | (null); "serving_label": string; "serving_grams": number; "basis"?: "per_serving" | "per_100g"; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); };
     "LessonOut": { "slug": string; "title": string; "category": string; "minutes": number; "version": number; "summary": string; "simple": string; "detailed": string; "content": string; "sources": Array<components["schemas"]["LessonSourceOut"]>; "quiz": components["schemas"]["LessonQuizOut"]; "progress"?: (components["schemas"]["LessonProgressOut"]) | (null); [key: string]: unknown; };
     "LessonProgressOut": { "score": number; "completed_at": string; "version": number; [key: string]: unknown; };
     "LessonQuizOut": { "question": string; "options": Array<string>; "explanation": string; [key: string]: unknown; };
@@ -68,6 +68,8 @@ export interface components {
     "QuizSubmissionIn": { "answers": Array<number>; };
     "RecipeIn": { "name": string; "yield_grams": number; "ingredients": Array<components["schemas"]["RecipeIngredientIn"]>; };
     "RecipeIngredientIn": { "food_id": number; "grams": number; "snapshot_id"?: (string) | (null); };
+    "RecommendationItemOut": { "food_id": number; "name": string; "reason": string; "focus": string; "serving_label": string; "serving_grams": number; "kcal"?: (number) | (null); "protein"?: (number) | (null); "carbs"?: (number) | (null); "fat"?: (number) | (null); "verification": string; "source"?: (string) | (null); "source_url"?: (string) | (null); [key: string]: unknown; };
+    "RecommendationsOut": { "date": string; "items": Array<components["schemas"]["RecommendationItemOut"]>; "message": string; "caution": string; [key: string]: unknown; };
     "RegisterIn": { "name": string; "email": string; "password": string; };
     "ResetPasswordIn": { "token": string; "password": string; };
     "ScanCandidateOut": { "id": string; "name": string; "grams": number; "matches": Array<components["schemas"]["ScanMatchOut"]>; [key: string]: unknown; };
@@ -129,6 +131,7 @@ export interface operations {
   "meals_api_v1_meals_get": { parameters: { query: { "date"?: (string) | (null); }; }; responses: { "200": { content: { "application/json": Array<components["schemas"]["MealOut"]>; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "meals_api_v1_meals_get"; };
   "add_meal_api_v1_meals_post": { requestBody: { required: true; content: { "application/json": components["schemas"]["MealIn"]; } }; responses: { "201": { content: { "application/json": components["schemas"]["MealOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "add_meal_api_v1_meals_post"; };
   "daily_summary_api_v1_analytics_daily_get": { responses: { "200": { content: { "application/json": components["schemas"]["DailySummaryOut"]; } }; }; operationId: "daily_summary_api_v1_analytics_daily_get"; };
+  "daily_recommendations_api_v1_recommendations_daily_get": { responses: { "200": { content: { "application/json": components["schemas"]["RecommendationsOut"]; } }; }; operationId: "daily_recommendations_api_v1_recommendations_daily_get"; };
   "analytics_range_api_v1_analytics_range_get": { parameters: { query: { "days"?: number; }; }; responses: { "200": { content: { "application/json": components["schemas"]["AnalyticsRangeOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "analytics_range_api_v1_analytics_range_get"; };
   "meal_detail_api_v1_meals__meal_id__get": { parameters: { path: { "meal_id": number; }; }; responses: { "200": { content: { "application/json": components["schemas"]["MealOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "meal_detail_api_v1_meals__meal_id__get"; };
   "update_meal_api_v1_meals__meal_id__put": { parameters: { path: { "meal_id": number; }; }; requestBody: { required: true; content: { "application/json": components["schemas"]["MealIn"]; } }; responses: { "200": { content: { "application/json": components["schemas"]["MealOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "update_meal_api_v1_meals__meal_id__put"; };
@@ -275,6 +278,9 @@ export interface paths {
   };
   "/api/v1/analytics/daily": {
     "get": operations["daily_summary_api_v1_analytics_daily_get"];
+  };
+  "/api/v1/recommendations/daily": {
+    "get": operations["daily_recommendations_api_v1_recommendations_daily_get"];
   };
   "/api/v1/analytics/range": {
     "get": operations["analytics_range_api_v1_analytics_range_get"];

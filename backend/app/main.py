@@ -31,6 +31,7 @@ from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
 from .branded_catalog import normalize_branded_food, normalize_search_hit
+from .recommendations import recommendation_eligibility
 
 load_dotenv()
 validate_production_environment(os.environ)
@@ -97,6 +98,7 @@ class Food(Base):
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     nutrition_basis: Mapped[str] = mapped_column(String(40), default="per_100g")
     nutrition_provenance: Mapped[dict] = mapped_column(JSON, default=dict)
+    ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)
     recipe: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     data_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -275,6 +277,7 @@ class FoodIn(BaseModel):
     name: str=Field(min_length=1,max_length=160,pattern=r".*\S.*"); state: str=Field(default="prepared",pattern="^(raw|cooked|prepared|boiled|steamed|fried|grilled|roasted|baked|dried|frozen)$")
     kcal: float | None=Field(default=None,ge=0,le=10000,allow_inf_nan=False); protein: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); carbs: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False); fat: float | None=Field(default=None,ge=0,le=1000,allow_inf_nan=False)
     brand: str|None=Field(default=None,max_length=120);category: str|None=Field(default=None,max_length=80); aliases:list[str]=Field(default_factory=list,max_length=24)
+    ingredients:str|None=Field(default=None,max_length=3000)
     serving_label:str|None=Field(default=None,max_length=100);serving_grams:float|None=Field(default=None,gt=0,le=10000,allow_inf_nan=False)
     @model_validator(mode="after")
     def validate_serving_pair(self):
@@ -286,6 +289,7 @@ class BarcodeImportIn(BaseModel):
 class LabelFoodIn(BaseModel):
     name:str=Field(min_length=1,max_length=160,pattern=r".*\S.*")
     brand:str|None=Field(default=None,max_length=120)
+    ingredients:str|None=Field(default=None,max_length=3000)
     serving_label:str=Field(min_length=1,max_length=100,pattern=r".*\S.*")
     serving_grams:float=Field(gt=0,le=10000,allow_inf_nan=False)
     basis:Literal["per_serving","per_100g"]="per_serving"
@@ -360,7 +364,7 @@ class AccessTokenOut(ApiResponse):access_token:str
 class FoodServingOut(ApiResponse):id:int;label:str;grams:float;source:str
 class FoodOut(ApiResponse):
     id:int;name:str;state:str;brand:str|None=None;category:str|None=None;aliases:list[str]=Field(default_factory=list)
-    recipe:dict[str,Any]|None=None;is_custom:bool=False;is_favorite:bool=False;verification:str
+    recipe:dict[str,Any]|None=None;ingredients:str|None=None;is_custom:bool=False;is_favorite:bool=False;verification:str
     source:str|None=None;source_record_id:str|None=None;source_url:str|None=None;nutrition_basis:str|None=None
     nutrition_provenance:dict[str,dict[str,Any]]=Field(default_factory=dict);data_notes:str|None=None;image_url:str|None=None
     updated_at:datetime|None=None;kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
@@ -377,6 +381,12 @@ class MealOut(ApiResponse):
 class NutrientTotalsOut(ApiResponse):kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
 class DailySummaryOut(ApiResponse):
     date:date;goals:dict[str,Any];totals:NutrientTotalsOut;water_ml:int;meals:list[MealOut]
+class RecommendationItemOut(ApiResponse):
+    food_id:int;name:str;reason:str;focus:str;serving_label:str;serving_grams:float
+    kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
+    verification:str;source:str|None=None;source_url:str|None=None
+class RecommendationsOut(ApiResponse):
+    date:date;items:list[RecommendationItemOut];message:str;caution:str
 class AnalyticsDayOut(ApiResponse):date:date;totals:NutrientTotalsOut;meal_count:int
 class AnalyticsWeightOut(ApiResponse):weight_kg:float;recorded_at:datetime
 class AnalyticsRangeOut(ApiResponse):days:int;start_date:date;end_date:date;daily:list[AnalyticsDayOut];weights:list[AnalyticsWeightOut]
@@ -390,7 +400,7 @@ class PreferencesOut(ApiResponse):preferences:dict[str,Any]
 class WeightOut(ApiResponse):id:int;weight_kg:float;recorded_at:datetime
 class BarcodeNutrientsOut(ApiResponse):kcal:float|None=None;protein:float|None=None;carbs:float|None=None;fat:float|None=None
 class BarcodeProductOut(ApiResponse):
-    barcode:str;name:str;brand:str|None=None;quantity:str|None=None;category:str|None=None;nutrition_per:str
+    barcode:str;name:str;brand:str|None=None;quantity:str|None=None;category:str|None=None;ingredients:str|None=None;nutrition_per:str
     nutrients:BarcodeNutrientsOut;verification:str;source:str;source_record_id:str;source_url:str;data_notes:str
 class ImageURLOut(ApiResponse):image_url:str
 class FoodStatusOut(ApiResponse):available:bool;message:str|None=None
@@ -718,7 +728,7 @@ def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=De
 
 def food_payload(f:Food,s:Session,is_favorite:bool=False):
     servings=list(s.scalars(select(FoodServing).where(FoodServing.food_id==f.id).order_by(FoodServing.grams)))
-    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"recipe":f.recipe,"is_custom":f.owner_id is not None,"is_favorite":is_favorite,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"image_url":f"/api/v1/foods/{f.id}/image" if f.image_path else None,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
+    return {"id":f.id,"name":f.name,"state":f.state,"brand":f.brand,"category":f.category,"aliases":f.aliases or [],"recipe":f.recipe,"ingredients":f.ingredients,"is_custom":f.owner_id is not None,"is_favorite":is_favorite,"verification":f.verification,"source":f.source,"source_record_id":f.source_record_id,"source_url":f.source_url,"nutrition_basis":f.nutrition_basis,"nutrition_provenance":f.nutrition_provenance or {},"data_notes":f.data_notes,"image_url":f"/api/v1/foods/{f.id}/image" if f.image_path else None,"updated_at":f.updated_at,"kcal":f.kcal,"protein":f.protein,"carbs":f.carbs,"fat":f.fat,"servings":[{"id":v.id,"label":v.label,"grams":v.grams,"source":v.source} for v in servings]}
 
 def accessible_food(food_id:int,s:Session,u:User)->Food:
     food=s.scalar(select(Food).where(Food.id==food_id,or_(Food.owner_id.is_(None),Food.owner_id==u.id)))
@@ -764,7 +774,9 @@ def fetch_open_food_facts(code:str)->dict:
                 values[key]=number
             except (TypeError,ValueError):values[key]=None
         category=" ".join(str(product.get("categories") or "").split(";")[0].split())[:80] or None
-        return {"barcode":code,"name":name,"brand":" ".join(str(product.get("brands") or "").split())[:120] or None,"quantity":" ".join(str(product.get("quantity") or "").split())[:80] or None,"category":category,"nutrition_per":"100 g","nutrients":values,"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
+        ingredient_text=product.get("ingredients_text_en") or product.get("ingredients_text")
+        ingredients=" ".join(ingredient_text.split())[:3000] if isinstance(ingredient_text,str) and ingredient_text.strip() else None
+        return {"barcode":code,"name":name,"brand":" ".join(str(product.get("brands") or "").split())[:120] or None,"quantity":" ".join(str(product.get("quantity") or "").split())[:80] or None,"category":category,"ingredients":ingredients,"nutrition_per":"100 g","nutrients":values,"verification":"imported","source":"Open Food Facts community-contributed product data","source_record_id":code,"source_url":f"https://world.openfoodfacts.org/product/{code}","data_notes":"Community-contributed packaging data; not independently verified by LossFit. Missing nutrient values are unavailable, not zero."}
     except HTTPException:raise
     except (httpx.HTTPError,ValueError,TypeError,KeyError):raise HTTPException(503,"The product catalogue is temporarily unavailable. Try again later.")
 
@@ -782,7 +794,7 @@ def import_barcode(raw_code:str,data:BarcodeImportIn,s:Session=Depends(db),u:Use
     if existing:return food_payload(existing,s)
     product=fetch_open_food_facts(code)
     provenance={key:{"status":"imported","source":product["source"],"source_url":product["source_url"],"source_record_id":code} for key,value in product["nutrients"].items() if value is not None}
-    food=Food(owner_id=u.id,name=(data.name or product["name"]).strip(),state="packaged",brand=product["brand"],category=product["category"],aliases=[code],verification="imported",source=product["source"],source_record_id=code,source_url=product["source_url"],nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes=product["data_notes"],kcal=product["nutrients"]["kcal"],protein=product["nutrients"]["protein"],carbs=product["nutrients"]["carbs"],fat=product["nutrients"]["fat"])
+    food=Food(owner_id=u.id,name=(data.name or product["name"]).strip(),state="packaged",brand=product["brand"],category=product["category"],ingredients=product.get("ingredients"),aliases=[code],verification="imported",source=product["source"],source_record_id=code,source_url=product["source_url"],nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes=product["data_notes"],kcal=product["nutrients"]["kcal"],protein=product["nutrients"]["protein"],carbs=product["nutrients"]["carbs"],fat=product["nutrients"]["fat"])
     s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"))
     try:s.commit();s.refresh(food)
     except Exception:s.rollback();raise
@@ -846,7 +858,7 @@ def import_usda_branded(fdc_id:int,s:Session=Depends(db),u:User=Depends(current_
     try:record=normalize_branded_food(payload)
     except (ValueError,TypeError):raise HTTPException(502,"USDA returned an invalid branded food record.")
     if record["source_record_id"]!=str(fdc_id):raise HTTPException(502,"USDA record identifier did not match the requested food.")
-    food=Food(owner_id=u.id,name=record["name"],state=record["state"],brand=record["brand"],category=record["category"],aliases=[],verification=record["verification"],source=record["source"],source_record_id=record["source_record_id"],source_url=record["source_url"],nutrition_basis=record["nutrition_basis"],nutrition_provenance=record["nutrition_provenance"],data_notes=record["data_notes"],kcal=record["kcal"],protein=record["protein"],carbs=record["carbs"],fat=record["fat"])
+    food=Food(owner_id=u.id,name=record["name"],state=record["state"],brand=record["brand"],category=record["category"],ingredients=record.get("ingredients"),aliases=[],verification=record["verification"],source=record["source"],source_record_id=record["source_record_id"],source_url=record["source_url"],nutrition_basis=record["nutrition_basis"],nutrition_provenance=record["nutrition_provenance"],data_notes=record["data_notes"],kcal=record["kcal"],protein=record["protein"],carbs=record["carbs"],fat=record["fat"])
     s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"))
     for portion in record["servings"]:
         s.add(FoodServing(food_id=food.id,label=portion["label"],grams=portion["grams"],source="USDA"))
@@ -947,7 +959,7 @@ def delete_food_image(food_id:int,s:Session=Depends(db),u:User=Depends(current_u
 @app.post("/api/v1/foods",status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
 def add_food(data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
-    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",nutrition_provenance=provenance,kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
+    f=Food(owner_id=u.id,name=data.name.strip(),state=data.state,brand=data.brand,category=data.category,ingredients=data.ingredients.strip() if data.ingredients and data.ingredients.strip() else None,aliases=clean_aliases(data.name,data.aliases),verification="user_provided",source="User provided",nutrition_basis="per_100g",nutrition_provenance=provenance,kcal=data.kcal,protein=data.protein,carbs=data.carbs,fat=data.fat)
     s.add(f);s.flush();s.add(FoodServing(food_id=f.id,label="100 g",grams=100,source="standard"))
     if data.serving_label and data.serving_grams:s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
@@ -960,14 +972,14 @@ def add_label_food(data:LabelFoodIn,s:Session=Depends(db),u:User=Depends(current
     source="Packaging label, transcribed by user"
     derivation=f"User-reviewed per {data.serving_grams:g} g serving converted to per 100 g" if data.basis=="per_serving" else "User-reviewed package values transcribed per 100 g"
     provenance={key:{"status":"user_provided","source":source,"derivation":derivation} for key,value in per100.items() if value is not None}
-    food=Food(owner_id=u.id,name=data.name.strip(),state="packaged",brand=data.brand.strip() if data.brand else None,category="Packaged food",aliases=[],verification="user_provided",source=source,nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes="Values came from a package label. Vision extraction, when used, was reviewed by the user; LossFit has not independently verified the label.",**per100)
+    food=Food(owner_id=u.id,name=data.name.strip(),state="packaged",brand=data.brand.strip() if data.brand else None,category="Packaged food",ingredients=data.ingredients.strip() if data.ingredients and data.ingredients.strip() else None,aliases=[],verification="user_provided",source=source,nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes="Values came from a package label. Vision extraction, when used, was reviewed by the user; LossFit has not independently verified the label.",**per100)
     s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"));s.add(FoodServing(food_id=food.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"));s.commit();s.refresh(food);return food_payload(food,s)
 @app.put("/api/v1/foods/{food_id}",response_model=FoodOut,response_model_exclude_unset=True)
 def update_food(food_id:int,data:FoodIn,s:Session=Depends(db),u:User=Depends(current_user)):
     f=s.scalar(select(Food).where(Food.id==food_id,Food.owner_id==u.id))
     if not f:raise HTTPException(404,"Personal food not found")
     if f.recipe:raise HTTPException(409,"Use the recipe editor to update ingredient-calculated nutrition")
-    f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None;f.data_notes=None;f.nutrition_provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
+    f.name=data.name.strip();f.state=data.state;f.brand=data.brand;f.category=data.category;f.ingredients=data.ingredients.strip() if data.ingredients and data.ingredients.strip() else None;f.aliases=clean_aliases(data.name,data.aliases);f.kcal=data.kcal;f.protein=data.protein;f.carbs=data.carbs;f.fat=data.fat;f.verification="user_provided";f.source="User provided";f.source_record_id=None;f.source_url=None;f.data_notes=None;f.nutrition_provenance={key:{"status":"user_provided","source":"User provided"} for key,value in (("kcal",data.kcal),("protein",data.protein),("carbs",data.carbs),("fat",data.fat)) if value is not None}
     if data.serving_label and data.serving_grams and not s.scalar(select(FoodServing.id).where(FoodServing.food_id==f.id,FoodServing.label==data.serving_label.strip())):
         s.add(FoodServing(food_id=f.id,label=data.serving_label.strip(),grams=data.serving_grams,source="user_provided"))
     s.commit();s.refresh(f);return food_payload(f,s)
@@ -1079,6 +1091,60 @@ def daily_summary(s:Session=Depends(db),u:User=Depends(current_user)):
     water_total=s.scalar(select(func.coalesce(func.sum(Water.ml),0)).where(Water.owner_id==u.id,Water.logged_at>=start,Water.logged_at<end)) or 0
     totals={key:(None if any(getattr(m,key) is None for m in day_meals) else sum(getattr(m,key) for m in day_meals)) for key in ("kcal","protein","carbs","fat")}
     return {"date":local_start.date().isoformat(),"goals":u.goals,"totals":totals,"water_ml":water_total,"meals":[meal_payload(m) for m in day_meals]}
+
+@app.get("/api/v1/recommendations/daily",response_model=RecommendationsOut,response_model_exclude_unset=True)
+def daily_recommendations(s:Session=Depends(db),u:User=Depends(current_user)):
+    summary=daily_summary(s,u)
+    preferences=u.preferences or {}
+    diet=str(preferences.get("diet") or "no_restrictions")
+    raw_allergies=preferences.get("allergies",[])
+    allergies=[str(value) for value in raw_allergies if isinstance(value,str) and value.strip()] if isinstance(raw_allergies,list) else []
+    caution=("Suggestions are screened only against ingredient text saved in LossFit. This cannot detect cross-contact, omitted ingredients, or packaging changes; confirm the current label. LossFit cannot confirm any food is safe or provide medical advice." if allergies or diet.casefold() in {"vegan","vegetarian","halal"} else "Nutrition values are informational. Check portion sizes and current package labels; these ideas are not a medical plan.")
+    if diet.casefold()=="halal":
+        return {"date":summary["date"],"items":[],"message":"LossFit cannot verify halal certification, so it will not make food-specific suggestions for this preference. Browse the catalogue and check trusted certification for each product.","caution":caution}
+
+    goals=u.goals or {}
+    totals=summary["totals"]
+    deficits=[]
+    for key in ("protein","carbs","fat"):
+        goal=goals.get(key);amount=totals.get(key)
+        if isinstance(goal,(int,float)) and goal>0 and isinstance(amount,(int,float)) and amount<goal:
+            deficits.append(((goal-amount)/goal,key,float(goal),float(amount)))
+    focus=max(deficits,default=(0.0,"",0.0,0.0))[1]
+    focus_goal=max(deficits,default=(0.0,"",0.0,0.0))[2]
+    focus_total=max(deficits,default=(0.0,"",0.0,0.0))[3]
+    focus_labels={"protein":"protein","carbs":"carbohydrate","fat":"fat"}
+
+    catalog=list(s.scalars(select(Food).where(or_(Food.owner_id.is_(None),Food.owner_id==u.id)).order_by(Food.name).limit(300)))
+    candidates=[]
+    for food in catalog:
+        allowed,_reason=recommendation_eligibility(food,diet,allergies)
+        if not allowed:continue
+        available={key:getattr(food,key) for key in ("kcal","protein","carbs","fat") if getattr(food,key) is not None}
+        if not available:continue
+        if focus:
+            amount=available.get(focus)
+            if amount is None:continue
+            calories=available.get("kcal")
+            score=float(amount)/(float(calories)+1) if calories is not None else float(amount)
+            reason=f"Your log records {focus_total:g} g of {focus_goal:g} g {focus_labels[focus]} today. This food lists {float(amount):g} g per 100 g; choose a portion that suits you."
+        else:
+            ratios=[float(available[key])/float(goal) for key,goal in goals.items() if key in available and key in {"protein","carbs","fat"} and isinstance(goal,(int,float)) and goal>0]
+            score=sum(ratios)/len(ratios) if ratios else 0.0
+            reason="A catalogue option with recorded nutrition values. Review its ingredients and choose a portion that suits you."
+        serving=s.scalar(select(FoodServing).where(FoodServing.food_id==food.id,FoodServing.source=="standard").order_by(FoodServing.grams).limit(1))
+        serving_grams=serving.grams if serving else 100.0
+        serving_label=serving.label if serving else "100 g"
+        candidates.append((score,food,reason,serving_grams,serving_label))
+    candidates.sort(key=lambda item:(-item[0],item[1].name.casefold(),item[1].id))
+    items=[{"food_id":food.id,"name":food.name,"reason":reason,"focus":focus or "balanced","serving_label":label,"serving_grams":grams,"kcal":food.kcal,"protein":food.protein,"carbs":food.carbs,"fat":food.fat,"verification":food.verification,"source":food.source,"source_url":food.source_url} for _,food,reason,grams,label in candidates[:3]]
+    if items:
+        message="These options use foods in your catalogue and today's logged nutrition. Ingredient screening is cautious and cannot guarantee safety." if allergies or diet.casefold() in {"vegan","vegetarian"} else "These options use foods in your catalogue and today's logged nutrition."
+    elif allergies or diet.casefold() in {"vegan","vegetarian"}:
+        message="No catalogue foods had enough recorded ingredient information to pass your preference screen. Add the full ingredient text from a current label, or choose foods using your own trusted checks."
+    else:
+        message="Add foods with nutrition values to your catalogue to see suggestions here."
+    return {"date":summary["date"],"items":items,"message":message,"caution":caution}
 
 @app.get("/api/v1/analytics/range",response_model=AnalyticsRangeOut,response_model_exclude_unset=True)
 def analytics_range(days:int=Query(default=7,ge=7,le=90),s:Session=Depends(db),u:User=Depends(current_user)):

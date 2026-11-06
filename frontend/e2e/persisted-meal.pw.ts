@@ -112,6 +112,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await checkResponsive(page,'manual-food',info);
   await checkAccessibility(page,'manual food');
   await page.getByLabel('Food name').fill('Browser test oatmeal');
+  await page.getByLabel('Ingredients (optional)').fill('rolled oats, water, cinnamon');
   await page.getByLabel('Preparation state').selectOption('cooked');
   await page.getByLabel('Calories (kcal)').fill('150');
   await page.getByLabel('Protein (g)').fill('5');
@@ -121,6 +122,15 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByLabel('Serving weight (g)').fill('150');
   await page.getByRole('button',{name:'Save food'}).click();
   await expect(page.getByRole('status')).toContainText('Food saved to your private catalogue.');
+  await page.goto('/home');
+  await expect(page.getByRole('heading',{name:'Suggestions for today'})).toBeVisible();
+  await expect(page.getByRole('link',{name:/Browser test oatmeal/})).toBeVisible();
+  await expect(page.getByText(/cannot guarantee safety/i)).toBeVisible();
+  await checkResponsive(page,'dashboard-recommendations',info);
+  await checkAccessibility(page,'dashboard recommendations');
+  await page.getByRole('link',{name:/Browser test oatmeal/}).click();
+  await expect(page.getByRole('heading',{name:'Recorded ingredients'})).toBeVisible();
+  await expect(page.getByText('rolled oats, water, cinnamon')).toBeVisible();
 
   await page.goto('/foods');
   await expect(page.getByRole('link',{name:/^Browser test oatmeal cooked/})).toBeVisible();
