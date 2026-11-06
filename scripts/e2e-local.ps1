@@ -6,10 +6,9 @@ $databaseUrl = "postgresql+psycopg://lossfit@127.0.0.1:55432/$dbName"
 $apiPort = Get-Random -Minimum 31000 -Maximum 49000
 $visionPort = Get-Random -Minimum 49001 -Maximum 56000
 $apiProcess = $null
-$visionProcess = $null
+$visionJob = $null
 $outLog = Join-Path $root '.local/e2e-api.out.log'
 $errLog = Join-Path $root '.local/e2e-api.err.log'
-$visionErrLog = Join-Path $root '.local/e2e-vision.err.log'
 New-Item -ItemType Directory -Force -Path (Join-Path $root '.local') | Out-Null
 
 Push-Location $root
@@ -29,14 +28,22 @@ try {
   $env:CORS_ORIGINS = 'http://127.0.0.1:4173,http://localhost:4173'
   $env:LOSSFIT_API_PROXY = "http://127.0.0.1:$apiPort"
   $env:E2E_VISION_PORT = "$visionPort"
-  $visionScript = '"' + (Join-Path $PSScriptRoot 'e2e-vision-provider.py') + '"'
-  $visionProcess = Start-Process -FilePath (Join-Path $root '.venv/Scripts/python.exe') -ArgumentList $visionScript -WorkingDirectory $root -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $root '.local/e2e-vision.out.log') -RedirectStandardError $visionErrLog
-  $visionHealthy = $false
-  for ($attempt = 0; $attempt -lt 30; $attempt++) {
-    if ($visionProcess.HasExited) { throw "Local vision test provider exited during startup. See $visionErrLog" }
-    try { if ((Invoke-WebRequest "http://127.0.0.1:$visionPort/health" -TimeoutSec 1).StatusCode -eq 200) { $visionHealthy = $true; break } } catch { Start-Sleep -Milliseconds 200 }
+  $visionScript = Join-Path $PSScriptRoot 'e2e-vision-provider.py'
+  $visionJob = Start-Job -ArgumentList (Join-Path $root '.venv/Scripts/python.exe'),$visionScript,"$visionPort" -ScriptBlock {
+    param($python,$script,$port)
+    $env:E2E_VISION_PORT = $port
+    & $python $script $port
   }
-  if (-not $visionHealthy) { throw "Local vision test provider did not become ready. See $visionErrLog" }
+  $visionHealthy = $false
+  $visionCheckError = ''
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    if ($visionJob.State -eq 'Failed' -or $visionJob.State -eq 'Completed') { throw "Local vision test provider exited during startup: $(Receive-Job $visionJob -Keep)" }
+    try { if ((Invoke-RestMethod "http://127.0.0.1:$visionPort/health" -TimeoutSec 1) -eq 'ok') { $visionHealthy = $true; break } } catch { $visionCheckError = $_.Exception.Message; Start-Sleep -Milliseconds 200 }
+  }
+  if (-not $visionHealthy) {
+    $providerOutput = Receive-Job $visionJob -Keep -ErrorAction SilentlyContinue | Out-String
+    throw "Local vision test provider did not become ready on port $visionPort (job state: $($visionJob.State)); last health check: $visionCheckError. $providerOutput"
+  }
   & (Join-Path $root '.venv/Scripts/python.exe') -m alembic -c backend/alembic.ini upgrade head
   if ($LASTEXITCODE -ne 0) { throw 'Could not migrate the disposable E2E database.' }
 
@@ -59,7 +66,7 @@ try {
   } finally { Pop-Location }
 } finally {
   if ($apiProcess -and -not $apiProcess.HasExited) { Stop-Process -Id $apiProcess.Id -Force }
-  if ($visionProcess -and -not $visionProcess.HasExited) { Stop-Process -Id $visionProcess.Id -Force }
+  if ($visionJob) { Stop-Job $visionJob -ErrorAction SilentlyContinue; Remove-Job $visionJob -Force -ErrorAction SilentlyContinue }
   if ($dbName -match '^lossfit_e2e_[0-9a-f]{32}$') {
     & (Join-Path $pgBin 'dropdb.exe') -h 127.0.0.1 -p 55432 -U lossfit --if-exists $dbName
     if ($LASTEXITCODE -ne 0) { Write-Warning "Could not drop disposable database $dbName; inspect it before removal." }
