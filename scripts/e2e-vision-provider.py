@@ -43,7 +43,9 @@ class Handler(BaseHTTPRequestHandler):
             elif isinstance(content, list):
                 user_parts.extend(item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text")
         user_text = " ".join(user_parts).casefold()
-        if "log 250 ml of water" in user_text:
+        if "log my weight as 68.4 kg" in user_text:
+            message = {"tool_calls": [{"id": "call-local-weight", "type": "function", "function": {"name": "propose_weight", "arguments": '{"weight_kg":68.4}'}}]}
+        elif "log 250 ml of water" in user_text:
             message = {"tool_calls": [{"id": "call-local-water", "type": "function", "function": {"name": "propose_water", "arguments": '{"water_ml":250}'}}]}
         elif has_image and "nutrition facts panel" in user_text:
             answer = json.dumps({"name": "Browser label granola", "brand": "Test", "serving_label": "1 bar", "serving_grams": 125, "basis": "per_serving", "kcal": 100, "protein": 8, "carbs": 12, "fat": None})
