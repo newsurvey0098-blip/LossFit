@@ -303,11 +303,20 @@ class DeleteAccountIn(BaseModel): password:str=Field(min_length=1,max_length=128
 class GoogleLinkIn(BaseModel): password:str=Field(min_length=1,max_length=128)
 class GoogleUnlinkIn(BaseModel): password:str=Field(min_length=1,max_length=128)
 class ProfileIn(BaseModel): name:str|None=Field(default=None,min_length=1,max_length=100); goals:dict[str,float]|None=None
+class MealReminderTimesIn(BaseModel):
+    breakfast:str=Field(default="08:00",pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    lunch:str=Field(default="12:30",pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    dinner:str=Field(default="19:00",pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    snack:str=Field(default="15:30",pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+class MealRemindersIn(BaseModel):
+    enabled:bool=False
+    times:MealReminderTimesIn=Field(default_factory=MealReminderTimesIn)
 class PreferencesIn(BaseModel):
     diet:str=Field(min_length=1,max_length=40,pattern=r".*\S.*")
     allergies:list[str]=Field(default_factory=list,max_length=24)
     timezone:str=Field(min_length=1,max_length=64)
     units:str=Field(pattern="^(metric|imperial)$")
+    meal_reminders:MealRemindersIn|None=None
 class ChatIn(BaseModel): conversation_id:int; message:str=Field(min_length=1,max_length=4000); idempotency_key:str=Field(min_length=16,max_length=64,pattern=r"^[A-Za-z0-9._:-]+$")
 class AssistantActionPreviewIn(BaseModel):
     conversation_id:int
@@ -607,7 +616,9 @@ def update_preferences(data:PreferencesIn,s:Session=Depends(db),u:User=Depends(c
         key=normalized.casefold()
         if not normalized or len(normalized)>80:raise HTTPException(422,"Each allergy must contain 1 to 80 characters")
         if key not in seen:seen.add(key);allergies.append(normalized)
-    u.preferences={**(u.preferences or {}),"diet":data.diet,"allergies":allergies,"timezone":data.timezone,"units":data.units}
+    current=u.preferences or {}
+    reminders=data.meal_reminders.model_dump() if data.meal_reminders else current.get("meal_reminders",MealRemindersIn().model_dump())
+    u.preferences={**current,"diet":data.diet,"allergies":allergies,"timezone":data.timezone,"units":data.units,"meal_reminders":reminders}
     s.commit();return {"preferences":u.preferences}
 @app.get("/api/v1/foods")
 def foods(q:str=Query(default="",max_length=160),s:Session=Depends(db),u:User=Depends(current_user)):

@@ -274,6 +274,17 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByText('No meals logged yet today.')).toBeVisible();
   await page.goto('/profile');
+  await page.getByLabel('Enable in-app meal reminders').check();
+  await page.getByLabel('Breakfast time').fill('07:45');
+  await page.getByRole('button',{name:'Save reminders'}).click();
+  await expect(page.getByRole('status')).toContainText('Meal reminders saved.');
+  await page.reload();
+  await expect(page.getByLabel('Enable in-app meal reminders')).toBeChecked();
+  await expect(page.getByLabel('Breakfast time')).toHaveValue('07:45');
+  await page.getByRole('link',{name:'Help & support'}).click();
+  await expect(page.getByRole('heading',{name:'Help & support'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Open scanner'})).toHaveAttribute('href','/scan');
+  await page.goto('/profile');
   await page.getByRole('button',{name:'Delete account…'}).click();
   await page.getByLabel('Current password').fill('safe-password-987');
   await page.getByLabel('Type DELETE MY ACCOUNT to confirm').fill('DELETE MY ACCOUNT');

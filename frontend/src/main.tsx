@@ -19,6 +19,8 @@ import ConnectedAccountsPage from './ConnectedAccountsPage';
 import PrivateRoute from './PrivateRoute';
 import LandingPage from './LandingPage';
 import RecipePage from './RecipePage';
+import ReminderNotice from './ReminderNotice';
+import HelpPage from './HelpPage';
 
 function usePageFocus(){const {pathname}=useLocation();React.useEffect(()=>{document.getElementById('main-content')?.focus({preventScroll:true});window.scrollTo(0,0)},[pathname]);}
 function PublicFrame(){usePageFocus();return <main className="public-frame" id="main-content" tabIndex={-1}><Outlet/></main>;}
@@ -38,7 +40,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   </>;
 }
 
-function PrivateShell(){return <Shell><Outlet/></Shell>}
+function PrivateShell(){return <Shell><ReminderNotice/><Outlet/></Shell>}
 
 function Dashboard() {
   const [summary,setSummary]=React.useState<any>(null);
@@ -84,7 +86,7 @@ function App(){return <><a className="skip-link" href="#main-content">Skip to ma
     <Route path="/recipes/new" element={<RecipePage/>}/><Route path="/recipes/:foodId/edit" element={<RecipePage/>}/><Route path="/foods" element={<FoodsPage/>}/><Route path="/foods/new" element={<ManualFoodPage/>}/><Route path="/foods/:foodId/edit" element={<EditFoodPage/>}/><Route path="/foods/:foodId" element={<FoodDetailPage/>}/><Route path="/learn/:slug?" element={<LearningPage/>}/>
     <Route path="/scan" element={<ScannerPage/>}/><Route path="/scan/barcode" element={<BarcodeScannerPage/>}/><Route path="/scan/label" element={<NutritionLabelPage/>}/><Route path="/scan/review/:scanId" element={<ScannerReviewPage/>}/>
     <Route path="/meals/new" element={<NewMealPage/>}/><Route path="/meals/:mealId" element={<MealDetailPage/>}/><Route path="/log" element={<FoodLogPage/>}/><Route path="/analytics" element={<AnalyticsPage/>}/>
-    <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings" element={<Navigate to="/profile" replace/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
+    <Route path="/profile" element={<ProfilePage/>}/><Route path="/settings" element={<Navigate to="/profile" replace/>}/><Route path="/settings/accounts" element={<ConnectedAccountsPage/>}/><Route path="/help" element={<HelpPage/>}/><Route path="/assistant/:conversationId?" element={<AssistantPage/>}/>
   </Route></Route>
   <Route element={<PublicFrame/>}><Route path="*" element={<NotFound/>}/></Route>
 </Routes></>}

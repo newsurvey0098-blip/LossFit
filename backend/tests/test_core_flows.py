@@ -434,11 +434,12 @@ def test_profile_goal_updates_are_persisted_per_user():
 def test_diet_allergy_units_and_timezone_preferences_are_validated_and_private():
     with TestClient(app) as owner,TestClient(app) as other:
         register(owner);headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
-        saved=owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":["peanuts"," tree nuts ","PEANUTS"],"timezone":"America/Los_Angeles","units":"imperial"})
+        saved=owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":["peanuts"," tree nuts ","PEANUTS"],"timezone":"America/Los_Angeles","units":"imperial","meal_reminders":{"enabled":True,"times":{"breakfast":"07:30","lunch":"12:15","dinner":"18:45","snack":"15:30"}}})
         assert saved.status_code==200
-        assert saved.json()['preferences']=={"diet":"vegan","allergies":["peanuts","tree nuts"],"timezone":"America/Los_Angeles","units":"imperial"}
+        assert saved.json()['preferences']=={"diet":"vegan","allergies":["peanuts","tree nuts"],"timezone":"America/Los_Angeles","units":"imperial","meal_reminders":{"enabled":True,"times":{"breakfast":"07:30","lunch":"12:15","dinner":"18:45","snack":"15:30"}}}
         assert owner.get('/api/v1/auth/me').json()['preferences']==saved.json()['preferences']
         assert owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":[],"timezone":"Not/A_Timezone","units":"metric"}).status_code==422
+        assert owner.put('/api/v1/users/preferences',headers=headers,json={"diet":"vegan","allergies":[],"timezone":"UTC","units":"metric","meal_reminders":{"enabled":True,"times":{"breakfast":"25:99"}}}).status_code==422
         register(other)
         assert other.get('/api/v1/auth/me').json()['preferences']=={}
 

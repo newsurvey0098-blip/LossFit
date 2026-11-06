@@ -10,6 +10,11 @@ Recipes are private catalogue foods with a JSON ingredient snapshot and finished
 - Every access JWT refers to a revocable database session. Logout revokes that session; a password reset revokes every session for the account.
 - CSRF is enforced for refresh/logout when the ambient refresh cookie is present. Requests also need a configured origin and matching double-submit token.
 
+## Meal reminders
+
+- Reminder enablement and validated 24-hour meal times are stored in the existing owner-scoped preferences JSON. The authenticated shell checks the configured profile timezone while a browser tab is open, emits an accessible in-app notice during the scheduled minute, and records that user/date/meal notice in the current browser's local storage to avoid repeating it on reload. Dismissal, opening the meal form, and settings persistence are available without a push-service dependency.
+- Background reminders are not delivered when the application is closed or suspended. Web Push credentials and a service worker subscription lifecycle are not configured; the profile explains this limit and does not imply that a saved schedule guarantees a notification.
+
 ## Google account linking
 
 - Linking starts only after password reauthentication. The server stores a one-use, ten-minute state digest, nonce, and JWT-secret-derived encrypted PKCE verifier; Google secrets remain server-side.
