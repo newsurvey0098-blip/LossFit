@@ -33,7 +33,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="top-right"><Link className="icon" to="/assistant" aria-label="Ask the nutrition assistant"><Sparkles size={20}/></Link><span className="date">{new Date().toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}).toUpperCase()}</span><Link className="avatar" to="/profile" aria-label="Profile settings">J</Link></div>
     </header>
     <main id="main-content" tabIndex={-1}>{children}</main>
-    <nav className="bottom" aria-label="Main navigation">
+    <nav className={`bottom ${location.pathname.startsWith('/scan')?'scanner-nav':''}`} aria-label="Main navigation">
       {[[Home,'Home','/home'],[Activity,'Insights','/analytics'],[Plus,'Add','/meals/new'],[Utensils,'Foods','/foods'],[CircleUserRound,'Profile','/profile']].map(([Icon,label,path]:any)=><Link key={label} aria-current={(location.pathname===path||(path==='/foods'&&location.pathname.startsWith('/foods/')))?'page':undefined} className={`navitem ${location.pathname===path?'active':''} ${label==='Add'?'addnav':''}`} to={path}><Icon size={label==='Add'?22:19}/><span>{label}</span></Link>)}
     </nav>
 

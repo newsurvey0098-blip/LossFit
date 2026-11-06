@@ -2,21 +2,35 @@ import {expect,test} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import AxeBuilder from '@axe-core/playwright';
 
-test('registration, onboarding, private food, and meal persist through the API',async({page})=>{
+async function checkResponsive(page: import('@playwright/test').Page, screenName:string, info:import('@playwright/test').TestInfo){
+  for(const [width,height] of [[320,800],[390,844],[768,1024],[1440,900]]){
+    await page.setViewportSize({width,height});
+    const layout=await page.evaluate(()=>({viewport:window.innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].map(element=>({tag:element.tagName.toLowerCase(),className:typeof element.className==='string'?element.className:'',text:(element.textContent??'').trim().slice(0,50),right:Math.round(element.getBoundingClientRect().right)})).filter(element=>element.right>window.innerWidth+1).slice(0,6)}));
+    expect(layout.document<=layout.viewport,`${screenName} overflows horizontally at ${width}px: ${JSON.stringify(layout.offenders)}`).toBe(true);
+    if((screenName==='dashboard'||screenName==='food-detail'||screenName==='scanner'||screenName==='scanner-review'||screenName==='assistant'||screenName==='profile'||screenName==='help')&&(width===390||width===1440))
+      await page.screenshot({path:info.outputPath(`${screenName}-${width}.png`),fullPage:true});
+  }
+  await page.setViewportSize({width:390,height:844});
+}
+
+test('registration, onboarding, private food, and meal persist through the API',async({page},info)=>{
   test.setTimeout(90000);
   const suffix=crypto.randomUUID();
   await page.goto('/register');
+  await checkResponsive(page,'register',info);
   await page.getByLabel('Name').fill('Browser Test User');
   await page.getByLabel('Email').fill(`browser-${suffix}@example.com`);
   await page.getByLabel('Password').fill('safe-password-987');
   await page.getByRole('button',{name:'Create account'}).click();
   await expect(page).toHaveURL(/\/onboarding\/body$/, {timeout:15000});
   await expect(page.getByRole('heading',{name:'Let’s get to know you.'})).toBeVisible({timeout:15000});
+  await checkResponsive(page,'onboarding-body',info);
   await page.getByLabel('Units').selectOption('imperial');
   await page.getByLabel('Height (in)').fill('70');
   await page.getByLabel('Current weight (lb)').fill('154.32');
   await page.getByRole('button',{name:'Continue'}).click();
   await expect(page.getByRole('heading',{name:'How you eat and move.'})).toBeVisible();
+  await checkResponsive(page,'onboarding-preferences',info);
   await page.getByLabel('Diet preference').selectOption('vegan');
   await page.getByLabel('soy',{exact:true}).check();
   await page.getByLabel('Timezone').fill('Asia/Kolkata');
@@ -29,8 +43,10 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Finish setup'}).click();
   await expect(page.getByRole('heading',{name:'Your profile is ready'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Good morning, Browser Test User.'})).toBeVisible({timeout:5000});
+  await checkResponsive(page,'dashboard',info);
 
   await page.goto('/weight');
+  await checkResponsive(page,'weight',info);
   await page.getByLabel('Weight (lb)').fill('220.462262');
   const weightWrite=page.waitForResponse(response=>response.url().endsWith('/api/v1/weight')&&response.request().method()==='POST');
   await page.getByRole('button',{name:'Log weight'}).click();
@@ -39,8 +55,10 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
   await page.goto('/analytics');
   await expect(page.getByText('220.5 lb',{exact:true})).toBeVisible();
+  await checkResponsive(page,'analytics',info);
 
   await page.goto('/assistant');
+  await checkResponsive(page,'assistant',info);
   await page.getByRole('button',{name:'Start a conversation',exact:true}).click();
   await expect(page).toHaveURL(/\/assistant\/\d+$/);
   await page.reload();
@@ -61,6 +79,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('button',{name:'Delete New conversation',exact:true})).toHaveCount(0);
 
   await page.goto('/foods/new');
+  await checkResponsive(page,'manual-food',info);
   await page.getByLabel('Food name').fill('Browser test oatmeal');
   await page.getByLabel('Preparation state').selectOption('cooked');
   await page.getByLabel('Calories (kcal)').fill('150');
@@ -73,11 +92,13 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('status')).toContainText('Food saved to your private catalogue.');
 
   await page.goto('/foods');
+  await checkResponsive(page,'foods',info);
   await page.getByLabel('Search foods').fill('Browser test oatmeal');
   const foodResult=page.getByRole('link',{name:/^Browser test oatmeal cooked/});
   await expect(foodResult).toBeVisible();
   await foodResult.click();
   await expect(page.getByRole('heading',{level:1,name:'Browser test oatmeal'})).toBeVisible();
+  await checkResponsive(page,'food-detail',info);
   await page.getByLabel('Choose a serving').selectOption('1 bowl');
   await expect(page.getByLabel('Portion size (grams)')).toHaveValue('150');
   await expect(page.getByText('225.0 kcal')).toBeVisible();
@@ -97,6 +118,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('link',{name:/^Browser test oatmeal cooked/})).toBeVisible();
 
   await page.goto('/recipes/new');
+  await checkResponsive(page,'recipe-form',info);
   await page.getByLabel('Recipe name').fill('Browser batch porridge');
   await page.getByLabel('Finished yield (grams)').fill('300');
   await page.getByLabel('Find an ingredient').fill('Browser test oatmeal');
@@ -104,6 +126,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Save recipe',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Browser batch porridge'})).toBeVisible();
   await expect(page.getByText('Finished yield: 300 g')).toBeVisible();
+  await checkResponsive(page,'recipe-detail',info);
   await page.getByRole('link',{name:'Edit recipe',exact:true}).click();
   await page.getByLabel('Finished yield (grams)').fill('600');
   await page.getByRole('button',{name:'Save recipe',exact:true}).click();
@@ -116,6 +139,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByRole('heading',{name:'Find your next meal'})).toBeVisible();
 
   await page.goto('/meals/new');
+  await checkResponsive(page,'meal-form',info);
   await page.getByLabel('Meal name').fill('Persisted oatmeal breakfast');
   await page.getByLabel('Search foods to add').fill('Browser test oatmeal');
   await page.getByRole('button',{name:/Browser test oatmeal/}).click();
@@ -124,6 +148,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await page.getByRole('button',{name:'Save meal'}).click();
   await expect(page.getByRole('heading',{name:'Persisted oatmeal breakfast'})).toBeVisible();
   await expect(page.getByText('225 kcal')).toBeVisible();
+  await checkResponsive(page,'meal-detail',info);
 
   const detailUrl=page.url();
   await page.reload();
@@ -141,22 +166,28 @@ test('registration, onboarding, private food, and meal persist through the API',
 
   await page.goto('/log');
   await expect(page.getByText('Edited oatmeal breakfast')).toBeVisible();
+  await checkResponsive(page,'food-log',info);
   await page.goto('/learn');
   await expect(page.getByRole('heading',{name:'Nutrition learning'})).toBeVisible();
+  await checkResponsive(page,'learning',info);
   await page.getByRole('link',{name:'Read lesson'}).first().click();
   await expect(page.getByRole('heading',{level:1})).toBeVisible();
+  await checkResponsive(page,'learning-lesson',info);
   await page.locator('input[name="answer"]').first().check();
   await page.getByRole('button',{name:'Check answer'}).click();
   await expect(page.getByRole('status')).toContainText(/Correct\.|Not quite\./);
   const visionStatus=page.waitForResponse(response=>response.url().endsWith('/api/v1/scan/status'));
   await page.goto('/scan');
   await expect(page.getByRole('heading',{name:'Scan a meal'})).toBeVisible();
+  await checkResponsive(page,'scanner',info);
   expect((await (await visionStatus).json()).available).toBe(true);
   await page.getByLabel('Take photo or choose image').setInputFiles({name:'meal-fixture.png',mimeType:'image/png',buffer:await readFile(new URL('./meal-fixture.png',import.meta.url))});
   await expect(page.getByRole('button',{name:'Analyze meal'})).toBeEnabled();
   await page.getByRole('button',{name:'Analyze meal'}).click();
   await expect(page).toHaveURL(/\/scan\/review\/\d+$/,{timeout:15000});
   await expect(page.getByRole('heading',{name:'Check detected foods'})).toBeVisible();
+  await checkResponsive(page,'scanner-review',info);
+  await expect(page.locator('nav[aria-label="Main navigation"]')).toHaveCSS('position','relative');
   await expect(page.getByRole('heading',{level:3,name:'Browser test oatmeal'})).toBeVisible();
   const scannerMatch=page.getByLabel('Match a catalogue food');
   const privateFoodOption=scannerMatch.locator('option').filter({hasText:'Browser test oatmeal'}).first();
@@ -179,6 +210,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page).toHaveURL(/\/home$/);
 
   await page.goto('/scan/barcode');
+  await checkResponsive(page,'barcode-scanner',info);
   await page.getByLabel('Barcode number').fill('3017624010701');
   await page.getByRole('button',{name:'Look up'}).click();
   await expect(page.getByRole('heading',{name:'Browser test cocoa spread'})).toBeVisible();
@@ -202,6 +234,7 @@ test('registration, onboarding, private food, and meal persist through the API',
 
   await page.goto('/scan/label');
   await expect(page.getByRole('heading',{name:'Read a package label'})).toBeVisible();
+  await checkResponsive(page,'label-scanner',info);
   await page.getByLabel('Package label photo').setInputFiles({name:'label.png',mimeType:'image/png',buffer:await readFile('e2e/meal-fixture.png')});
   await page.getByRole('button',{name:'Read label with AI'}).click();
   await expect(page.getByLabel('Food name')).toHaveValue('Browser label granola');
@@ -243,12 +276,14 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page).toHaveURL(/\/assistant$/);
   await page.goto('/settings/accounts');
   await expect(page.getByRole('heading',{name:'Connected accounts'})).toBeVisible();
+  await checkResponsive(page,'connected-accounts',info);
   await expect(page.getByText('Unavailable',{exact:true})).toBeVisible();
 
   await page.goto('/settings');
   await expect(page).toHaveURL(/\/profile$/);
   await page.goto('/profile');
   await expect(page.getByLabel('Dietary preference')).toHaveValue('vegan');
+  await checkResponsive(page,'profile',info);
   await expect(page.getByLabel('Allergies or foods to avoid')).toHaveValue('soy');
   await expect(page.getByText(/70\.0 in · 220\.5 lb/)).toBeVisible();
   const jsonDownload=page.waitForEvent('download');
@@ -285,6 +320,7 @@ test('registration, onboarding, private food, and meal persist through the API',
   await expect(page.getByLabel('Breakfast time')).toHaveValue('07:45');
   await page.getByRole('link',{name:'Help & support'}).click();
   await expect(page.getByRole('heading',{name:'Help & support'})).toBeVisible();
+  await checkResponsive(page,'help',info);
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   await expect(page.getByRole('link',{name:'Open scanner'})).toHaveAttribute('href','/scan');
   await page.goto('/profile');
