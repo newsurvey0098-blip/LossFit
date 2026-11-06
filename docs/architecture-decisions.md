@@ -43,7 +43,7 @@ Recipes are private catalogue foods with a JSON ingredient snapshot and finished
 - The API resolves catalogue food nutrition and portions before writing a meal. Scanner and assistant suggestions cannot set authoritative nutrients.
 - Meal items retain copied food, portion, preparation, nutrition, verification, and source fields so later catalogue edits do not change historical meals.
 - Missing values remain null. They are never silently interpreted as measured zero.
-- Public catalogue imports pin SHA-256 checked USDA Foundation Foods and FNDDS archives. Each nutrient carries its own analytical/reviewed status and source derivation; negative source values are withheld with a visible data note. The initial catalogue deliberately excludes the much larger branded-food release; imported source record IDs can be extended without changing the food or snapshot contract.
+- Public catalogue imports pin SHA-256 checked USDA Foundation Foods and FNDDS archives. Each nutrient carries its own analytical/reviewed status and source derivation; negative source values are withheld with a visible data note. USDA Branded products are searched on demand with a server-side data.gov API key, then imported into the requesting user's private catalogue with `imported` nutrient provenance and a historical meal snapshot. No periodic branded-catalog refresh runs; a missing API key is reported as unavailable, while barcode and manual entry continue to work.
 
 ## Knowledge retrieval
 

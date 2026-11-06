@@ -30,6 +30,7 @@ from .production import configured_app_base_url, configured_cors_origins, databa
 from .assistant_tools import generate as generate_assistant_reply
 from .knowledge import content_hash, chunk_document, request_embeddings, retrieve as retrieve_knowledge
 from .private_storage import read_private_image, remove_private_image, remove_private_image_sync, store_private_image
+from .branded_catalog import normalize_branded_food, normalize_search_hit
 
 load_dotenv()
 validate_production_environment(os.environ)
@@ -393,6 +394,7 @@ class BarcodeProductOut(ApiResponse):
     nutrients:BarcodeNutrientsOut;verification:str;source:str;source_record_id:str;source_url:str;data_notes:str
 class ImageURLOut(ApiResponse):image_url:str
 class FoodStatusOut(ApiResponse):available:bool;message:str|None=None
+class BrandedFoodHitOut(ApiResponse):fdc_id:int;name:str;brand:str|None=None;package_serving:str|None=None;nutrients:BarcodeNutrientsOut;source_url:str
 class ScanMatchOut(ApiResponse):id:int;name:str;state:str;verification:str;score:float
 class ScanCandidateOut(ApiResponse):id:str;name:str;grams:float;matches:list[ScanMatchOut]
 class ScanOut(ApiResponse):id:int;status:str;candidates:list[ScanCandidateOut];meal_id:int|None=None;image_url:str|None=None
@@ -782,6 +784,72 @@ def import_barcode(raw_code:str,data:BarcodeImportIn,s:Session=Depends(db),u:Use
     provenance={key:{"status":"imported","source":product["source"],"source_url":product["source_url"],"source_record_id":code} for key,value in product["nutrients"].items() if value is not None}
     food=Food(owner_id=u.id,name=(data.name or product["name"]).strip(),state="packaged",brand=product["brand"],category=product["category"],aliases=[code],verification="imported",source=product["source"],source_record_id=code,source_url=product["source_url"],nutrition_basis="per_100g",nutrition_provenance=provenance,data_notes=product["data_notes"],kcal=product["nutrients"]["kcal"],protein=product["nutrients"]["protein"],carbs=product["nutrients"]["carbs"],fat=product["nutrients"]["fat"])
     s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"))
+    try:s.commit();s.refresh(food)
+    except Exception:s.rollback();raise
+    return food_payload(food,s)
+
+def fdc_branded_key()->str:
+    return os.getenv("FDC_API_KEY","").strip()
+
+def fdc_json_request(path:str,*,params:dict[str,str],body:dict[str,Any]|None=None)->dict[str,Any]:
+    key=fdc_branded_key()
+    if not key:
+        raise HTTPException(503,"USDA Branded food lookup is not configured. Use barcode scanning or manual food entry.")
+    url="https://api.nal.usda.gov/fdc/v1/"+path.lstrip("/")
+    try:
+        with httpx.Client(timeout=httpx.Timeout(8,connect=3),follow_redirects=False) as client:
+            method="POST" if body is not None else "GET"
+            with client.stream(method,url,params={**params,"api_key":key},json=body,headers={"User-Agent":"LossFit/0.1.0 (https://github.com/newsurvey0098-blip/LossFit)"}) as response:
+                if response.status_code==404:
+                    raise HTTPException(404,"USDA FoodData Central has no matching branded record.")
+                if response.status_code!=200:
+                    raise HTTPException(503,"USDA Branded food lookup is temporarily unavailable. Try again later.")
+                content=bytearray()
+                for chunk in response.iter_bytes():
+                    content.extend(chunk)
+                    if len(content)>1_500_000:
+                        raise HTTPException(502,"USDA Branded food response exceeded its size limit.")
+        payload=json.loads(content)
+        if not isinstance(payload,dict):
+            raise ValueError("Invalid USDA response")
+        return payload
+    except HTTPException:
+        raise
+    except (httpx.HTTPError,ValueError,TypeError,KeyError):
+        raise HTTPException(503,"USDA Branded food lookup is temporarily unavailable. Try again later.")
+
+@app.get("/api/v1/food-sources/usda-branded/status",response_model=FoodStatusOut)
+def usda_branded_status(u:User=Depends(current_user)):
+    return {"available":bool(fdc_branded_key()),"message":None if fdc_branded_key() else "USDA Branded search needs a server-side FDC_API_KEY. Barcode lookup and manual entry remain available."}
+
+@app.get("/api/v1/food-sources/usda-branded/search",response_model=list[BrandedFoodHitOut])
+def search_usda_branded(q:str=Query(min_length=2,max_length=100),s:Session=Depends(db),u:User=Depends(current_user)):
+    enforce_rate_limit(s,"fdc_branded_search_user",str(u.id),20,600)
+    payload=fdc_json_request("foods/search",params={},body={"query":q.strip(),"dataType":["Branded"],"pageSize":12,"pageNumber":1})
+    rows=payload.get("foods")
+    if not isinstance(rows,list):
+        raise HTTPException(502,"USDA returned an invalid branded search response.")
+    hits=[]
+    for row in rows[:12]:
+        try:hits.append(normalize_search_hit(row))
+        except (ValueError,TypeError):continue
+    return hits
+
+@app.post("/api/v1/food-sources/usda-branded/{fdc_id}/import",status_code=201,response_model=FoodOut,response_model_exclude_unset=True)
+def import_usda_branded(fdc_id:int,s:Session=Depends(db),u:User=Depends(current_user)):
+    if fdc_id<1 or fdc_id>2_147_483_647:raise HTTPException(422,"Invalid USDA FDC identifier.")
+    enforce_rate_limit(s,"fdc_branded_import_user",str(u.id),20,3600)
+    source="USDA FoodData Central Branded"
+    existing=s.scalar(select(Food).where(Food.owner_id==u.id,Food.source==source,Food.source_record_id==str(fdc_id)))
+    if existing:return food_payload(existing,s)
+    payload=fdc_json_request(f"food/{fdc_id}",params={})
+    try:record=normalize_branded_food(payload)
+    except (ValueError,TypeError):raise HTTPException(502,"USDA returned an invalid branded food record.")
+    if record["source_record_id"]!=str(fdc_id):raise HTTPException(502,"USDA record identifier did not match the requested food.")
+    food=Food(owner_id=u.id,name=record["name"],state=record["state"],brand=record["brand"],category=record["category"],aliases=[],verification=record["verification"],source=record["source"],source_record_id=record["source_record_id"],source_url=record["source_url"],nutrition_basis=record["nutrition_basis"],nutrition_provenance=record["nutrition_provenance"],data_notes=record["data_notes"],kcal=record["kcal"],protein=record["protein"],carbs=record["carbs"],fat=record["fat"])
+    s.add(food);s.flush();s.add(FoodServing(food_id=food.id,label="100 g",grams=100,source="standard"))
+    for portion in record["servings"]:
+        s.add(FoodServing(food_id=food.id,label=portion["label"],grams=portion["grams"],source="USDA"))
     try:s.commit();s.refresh(food)
     except Exception:s.rollback();raise
     return food_payload(food,s)

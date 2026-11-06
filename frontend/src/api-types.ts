@@ -18,6 +18,7 @@ export interface components {
     "Body_analyze_label_api_v1_labels_analyze_post": { "image": string; };
     "Body_create_scan_api_v1_scans_post": { "image": string; };
     "Body_upload_food_image_api_v1_foods__food_id__image_post": { "image": string; };
+    "BrandedFoodHitOut": { "fdc_id": number; "name": string; "brand"?: (string) | (null); "package_serving"?: (string) | (null); "nutrients": components["schemas"]["BarcodeNutrientsOut"]; "source_url": string; [key: string]: unknown; };
     "ChatIn": { "conversation_id": number; "message": string; "idempotency_key": string; };
     "CitationOut": { "ref": string; "title"?: (string) | (null); "organization"?: (string) | (null); "url"?: (string) | (null); "version"?: (string) | (number) | (null); [key: string]: unknown; };
     "ConversationSummaryOut": { "id": number; "title": string; "created_at"?: (string) | (null); "updated_at"?: (string) | (null); [key: string]: unknown; };
@@ -106,6 +107,9 @@ export interface operations {
   "add_food_api_v1_foods_post": { requestBody: { required: true; content: { "application/json": components["schemas"]["FoodIn"]; } }; responses: { "201": { content: { "application/json": components["schemas"]["FoodOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "add_food_api_v1_foods_post"; };
   "lookup_barcode_api_v1_barcodes__raw_code__get": { parameters: { path: { "raw_code": string; }; }; responses: { "200": { content: { "application/json": components["schemas"]["BarcodeProductOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "lookup_barcode_api_v1_barcodes__raw_code__get"; };
   "import_barcode_api_v1_barcodes__raw_code__import_post": { parameters: { path: { "raw_code": string; }; }; requestBody: { required: true; content: { "application/json": components["schemas"]["BarcodeImportIn"]; } }; responses: { "201": { content: { "application/json": components["schemas"]["FoodOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "import_barcode_api_v1_barcodes__raw_code__import_post"; };
+  "usda_branded_status_api_v1_food_sources_usda_branded_status_get": { responses: { "200": { content: { "application/json": components["schemas"]["FoodStatusOut"]; } }; }; operationId: "usda_branded_status_api_v1_food_sources_usda_branded_status_get"; };
+  "search_usda_branded_api_v1_food_sources_usda_branded_search_get": { parameters: { query: { "q": string; }; }; responses: { "200": { content: { "application/json": Array<components["schemas"]["BrandedFoodHitOut"]>; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "search_usda_branded_api_v1_food_sources_usda_branded_search_get"; };
+  "import_usda_branded_api_v1_food_sources_usda_branded__fdc_id__import_post": { parameters: { path: { "fdc_id": number; }; }; responses: { "201": { content: { "application/json": components["schemas"]["FoodOut"]; } }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "import_usda_branded_api_v1_food_sources_usda_branded__fdc_id__import_post"; };
   "favorite_foods_api_v1_foods_favorites_get": { responses: { "200": { content: { "application/json": Array<components["schemas"]["FoodOut"]>; } }; }; operationId: "favorite_foods_api_v1_foods_favorites_get"; };
   "add_food_favorite_api_v1_foods__food_id__favorite_put": { parameters: { path: { "food_id": number; }; }; responses: { "204": { description: "Successful Response" }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "add_food_favorite_api_v1_foods__food_id__favorite_put"; };
   "remove_food_favorite_api_v1_foods__food_id__favorite_delete": { parameters: { path: { "food_id": number; }; }; responses: { "204": { description: "Successful Response" }; "422": { content: { "application/json": components["schemas"]["HTTPValidationError"]; } }; }; operationId: "remove_food_favorite_api_v1_foods__food_id__favorite_delete"; };
@@ -217,6 +221,15 @@ export interface paths {
   };
   "/api/v1/barcodes/{raw_code}/import": {
     "post": operations["import_barcode_api_v1_barcodes__raw_code__import_post"];
+  };
+  "/api/v1/food-sources/usda-branded/status": {
+    "get": operations["usda_branded_status_api_v1_food_sources_usda_branded_status_get"];
+  };
+  "/api/v1/food-sources/usda-branded/search": {
+    "get": operations["search_usda_branded_api_v1_food_sources_usda_branded_search_get"];
+  };
+  "/api/v1/food-sources/usda-branded/{fdc_id}/import": {
+    "post": operations["import_usda_branded_api_v1_food_sources_usda_branded__fdc_id__import_post"];
   };
   "/api/v1/foods/favorites": {
     "get": operations["favorite_foods_api_v1_foods_favorites_get"];
