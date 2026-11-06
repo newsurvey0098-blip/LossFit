@@ -609,14 +609,17 @@ def test_account_deletion_requires_password_and_confirmation_then_cleans_user_da
         user=register(client);csrf=client.cookies['lf_csrf'];headers={"origin":"http://localhost:5173","x-csrf-token":csrf}
         monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path));private_file=tmp_path/str(user['id'])/'scan.jpg';private_file.parent.mkdir();private_file.write_bytes(b'private')
         with main.SessionLocal() as db:db.add(main.ScanSession(owner_id=user['id'],private_path=str(private_file),candidates=[],status='needs_review'));db.commit()
-        client.post('/api/v1/foods',headers=headers,json={"name":"Private oats","kcal":80})
+        food=client.post('/api/v1/foods',headers=headers,json={"name":"Private oats","kcal":80}).json()
+        photo=io.BytesIO();Image.new('RGB',(64,64),'green').save(photo,format='PNG')
+        assert client.post(f"/api/v1/foods/{food['id']}/image",headers=headers,files={"image":("oats.png",photo.getvalue(),"image/png")}).status_code==201
+        private_food_file=next(tmp_path.rglob('*.jpg'))
         meal=client.post('/api/v1/meals',headers=headers,json={"name":"Breakfast","meal_type":"breakfast","items":[]})
         conversation=client.post('/api/v1/assistant/conversations',headers=headers).json()
         wrong=client.request('DELETE','/api/v1/account',headers=headers,json={"password":"wrong-password","confirmation":"DELETE MY ACCOUNT"})
         assert wrong.status_code==403
         deleted=client.request('DELETE','/api/v1/account',headers=headers,json={"password":"safe-password-987","confirmation":"DELETE MY ACCOUNT"})
         assert deleted.status_code==204
-        assert not private_file.exists()
+        assert not private_file.exists() and not private_food_file.exists()
         assert client.get('/api/v1/auth/me').status_code==401
         assert client.get(f"/api/v1/meals/{meal.json()['id']}").status_code==401
         with main.SessionLocal() as db:
@@ -680,6 +683,29 @@ def test_meal_history_analytics_and_exports_use_user_local_dates():
         assert len(export['meals'])==1 and export['meals'][0]['name']=='Before midnight UTC'
         assert client.get(f"/api/v1/privacy/export.csv?start_date={local_today}&end_date={local_today}").status_code==200
         assert client.get('/api/v1/analytics/range?days=6').status_code==422
+
+def test_custom_food_photos_are_private_validated_replaceable_and_deleted(monkeypatch,tmp_path):
+    image=io.BytesIO();Image.new('RGB',(320,240),(30,140,70)).save(image,format='PNG');image_bytes=image.getvalue()
+    monkeypatch.setenv('PRIVATE_UPLOAD_DIR',str(tmp_path))
+    with TestClient(app) as owner,TestClient(app) as other:
+        register(owner);headers={"origin":"http://localhost:5173","x-csrf-token":owner.cookies['lf_csrf']}
+        food=owner.post('/api/v1/foods',headers=headers,json={"name":"Photo oats","kcal":150}).json();food_id=food['id']
+        bad=owner.post(f'/api/v1/foods/{food_id}/image',headers=headers,files={"image":("bad.jpg",b"not an image","image/jpeg")})
+        assert bad.status_code==415
+        first=owner.post(f'/api/v1/foods/{food_id}/image',headers=headers,files={"image":("oats.png",image_bytes,"image/png")})
+        assert first.status_code==201
+        image_url=first.json()['image_url'];path=next(tmp_path.rglob('*.jpg'))
+        with Image.open(path) as sanitized:assert sanitized.format=='JPEG' and sanitized.getexif()=={}
+        assert owner.get(f'/api/v1/foods/{food_id}').json()['image_url']==image_url
+        assert owner.get(image_url).status_code==200
+        register(other)
+        assert other.get(image_url).status_code==404
+        assert other.post(f'/api/v1/foods/{food_id}/image',headers={"origin":"http://localhost:5173","x-csrf-token":other.cookies['lf_csrf']},files={"image":("oats.png",image_bytes,"image/png")}).status_code==404
+        replacement=owner.post(f'/api/v1/foods/{food_id}/image',headers=headers,files={"image":("oats.png",image_bytes,"image/png")})
+        assert replacement.status_code==201 and len(list(tmp_path.rglob('*.jpg')))==1
+        assert owner.delete(f'/api/v1/foods/{food_id}/image',headers=headers).status_code==204
+        assert list(tmp_path.rglob('*.jpg'))==[]
+        assert owner.get(image_url).status_code==404
 
 def test_scanner_validates_private_image_resolves_candidates_and_confirms_once(monkeypatch,tmp_path):
     image=io.BytesIO();Image.new('RGB',(320,240),(30,140,70)).save(image,format='PNG');image_bytes=image.getvalue()

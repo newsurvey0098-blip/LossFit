@@ -22,13 +22,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length))
-        content = body["messages"][0]["content"]
+        messages = body["messages"]
+        content = messages[-1]["content"]
         has_image = isinstance(content, list) and any(item.get("type") == "image_url" for item in content if isinstance(item, dict))
-        if has_image:
+        user_text = " ".join(message.get("content", "") for message in messages if message.get("role") == "user" and isinstance(message.get("content"), str)).casefold()
+        if "log 250 ml of water" in user_text:
+            message = {"tool_calls": [{"id": "call-local-water", "type": "function", "function": {"name": "propose_water", "arguments": '{"water_ml":250}'}}]}
+        elif has_image:
             answer = json.dumps({"items": [{"name": "Browser test oatmeal", "grams": 150}]})
+            message = {"content": answer}
         else:
-            answer = "This is a deterministic test response based on your saved nutrition log."
-        payload = {"choices": [{"message": {"content": answer}}]}
+            message = {"content": "This is a deterministic test response based on your saved nutrition log."}
+        payload = {"choices": [{"message": message}]}
         encoded = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
