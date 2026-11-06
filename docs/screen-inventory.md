@@ -41,4 +41,4 @@ The original design uses mobile-first dark surfaces and food photography, a dail
 
 ## Cross-screen feature references
 
-Favorites/recent foods, reminders, barcode and nutrition-label scanning, Google linking, manual-entry images, serving units, meal assignment, profile units, and help appear in the reference family. Barcode product lookup and manual nutrition-label transcription are implemented; automatic label OCR, reminders, live Google credentials, and help content remain unavailable or outstanding. None should be treated as silently delivered.
+Favorites/recent foods, reminders, barcode and nutrition-label scanning, Google linking, manual-entry images, serving units, meal assignment, profile units, and help appear in the reference family. Barcode product lookup, deterministic-test-covered AI label extraction with mandatory user review, and manual nutrition-label transcription are implemented; live OCR provider behavior, reminders, live Google credentials, and help content remain unavailable or outstanding. None should be treated as silently delivered.
