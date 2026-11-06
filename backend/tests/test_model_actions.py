@@ -36,6 +36,27 @@ def test_model_water_proposal_is_persisted_but_requires_confirm_and_retry_is_saf
         for _ in range(2):assert client.post(f"/api/v1/assistant/actions/{action['id']}/confirm",headers=h).status_code==200
         assert client.get('/api/v1/analytics/daily').json()['water_ml']==250
 
+def test_assistant_provider_outage_can_retry_same_key_and_persist_once(monkeypatch):
+    for key,value in {'AI_BASE_URL':'https://provider.invalid/v1','AI_API_KEY':'test-secret','AI_MODEL':'test-model'}.items():monkeypatch.setenv(key,value)
+    calls=[]
+    def generate(_client,_base,_key,_model,_messages,_search):
+        calls.append(1)
+        if len(calls)==1:raise TimeoutError('provider timeout')
+        return 'Recovered answer.',None
+    monkeypatch.setattr(main,'generate_assistant_reply',generate)
+    with TestClient(main.app) as client:
+        h,c=setup(client);body={'conversation_id':c,'message':'Explain my lunch','idempotency_key':uuid4().hex}
+        failed=client.post('/api/v1/assistant',headers=h,json=body)
+        assert failed.status_code==503 and 'message was not saved' in failed.json()['detail']
+        assert client.get(f'/api/v1/assistant/conversations/{c}',headers=h).json()['messages']==[]
+        recovered=client.post('/api/v1/assistant',headers=h,json=body)
+        assert recovered.status_code==200 and recovered.json()['message']=='Recovered answer.'
+        replay=client.post('/api/v1/assistant',headers=h,json=body)
+        assert replay.status_code==200 and replay.json()['already_processed'] is True
+        assert len(calls)==2
+        history=client.get(f'/api/v1/assistant/conversations/{c}',headers=h).json()
+        assert [(message['role'],message['content']) for message in history['messages']]==[('user','Explain my lunch'),('assistant','Recovered answer.')]
+
 def test_model_meal_resolves_search_ids_and_server_nutrition(monkeypatch):
     messages=[];requests=provider(monkeypatch,messages)
     with TestClient(main.app) as client:
