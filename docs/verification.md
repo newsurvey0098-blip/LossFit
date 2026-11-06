@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- On 2026-11-07, verified the Windows startup script with ports 5173 and 5174 already occupied. It selected `http://127.0.0.1:5175`, launched Vite with `--strictPort`, and Vite reported the same URL. Stopped only this verification server; the pre-existing listeners were left running. `scripts/start-dev.ps1` now prints the selected port and reports frontend exit failures instead of relying on Vite's silent fallback.
+
 - On 2026-11-07, hosted GitHub Actions run [42291920749](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42291920749) passed all four jobs for commit `fbe0a36244841a99a92e805e0780ad7accfc4eed`: dependency audit, pgvector-backed backend tests, frontend tests/build, and browser E2E. This includes the newly added assistant-outage composer contrast fix. Vercel deployment remains deferred by request.
 
 - On 2026-11-07, the new axe check on the assistant-provider outage state caught low contrast in typed composer text. Shared input/select/textarea styling now inherits LossFit's light foreground color. The focused fresh-database assistant journey passed 1/1, the full fresh-database Chromium suite passed 7/7, frontend tests passed 33/33, and the TypeScript/Vite production build passed. The outage alert and Retry control now have an automated WCAG A/AA axe check; manual screen-reader and actual browser-zoom review remain outstanding. No deployment was performed.

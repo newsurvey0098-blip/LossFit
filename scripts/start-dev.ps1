@@ -11,6 +11,18 @@ function Test-ApiReady($Health) {
   return $Health.status -eq 'ready' -and $Health.database -eq 'connected' -and $Health.migrations -eq 'current'
 }
 
+function Test-PortAvailable([int]$Port) {
+  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+  try {
+    $listener.Start()
+    return $true
+  } catch {
+    return $false
+  } finally {
+    $listener.Stop()
+  }
+}
+
 New-Item -ItemType Directory -Force -Path $localDirectory | Out-Null
 
 try {
@@ -60,13 +72,24 @@ if (-not $apiReady) {
   throw "LossFit API/database did not become ready at http://127.0.0.1:3001. Check '$apiErrLog' and run scripts/setup-windows.ps1 if the local database is stopped."
 }
 
+$frontendPort = 5173
+while ($frontendPort -le 5193 -and -not (Test-PortAvailable $frontendPort)) {
+  $frontendPort++
+}
+if ($frontendPort -gt 5193) {
+  throw 'No free frontend port is available in the range 5173-5193. Stop an old LossFit/Vite process and rerun scripts/start-dev.ps1.'
+}
+
 Write-Host 'LossFit API ready; PostgreSQL is connected.'
-Write-Host 'Frontend: http://127.0.0.1:5173'
+Write-Host "Frontend: http://127.0.0.1:$frontendPort"
 Write-Host 'API docs: http://127.0.0.1:3001/docs'
 
 Push-Location (Join-Path $root 'frontend')
 try {
-  & (Join-Path $root '.runtime/node-v22.23.4-win-x64/npm.cmd') run dev
+  & (Join-Path $root '.runtime/node-v22.23.4-win-x64/npm.cmd') run dev -- --port $frontendPort --strictPort
+  if ($LASTEXITCODE -ne 0) {
+    throw "LossFit frontend exited with code $LASTEXITCODE."
+  }
 } finally {
   Pop-Location
   if ($apiProcess -and -not $apiProcess.HasExited) {
