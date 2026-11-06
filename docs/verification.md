@@ -1,5 +1,7 @@
 # Implementation evidence
 
+- On 2026-11-06, reran the local backend/frontend acceptance checks after the user confirmed successful account registration and login. `scripts/test.ps1` migrated a newly created empty PostgreSQL database and passed 98/98 backend tests; `frontend/npm test` passed 29/29 tests; `frontend/npm run build` passed TypeScript and Vite production compilation. The isolated test database was retained for inspection. Browser visual review and screen-reader/real-zoom checks were not performed in this run.
+
 - On 2026-11-06, the user confirmed creating an account and signing in successfully in the local app after the stale API process was stopped. `scripts/check-dev.ps1` passed: the frontend returned HTTP 200, and the Vite-proxied readiness endpoint reported `status: ready`, `database: connected`, and `migrations: current`. The `/register` route returned HTTP 200. Vite also started a second frontend on port 5174 because port 5173 was already occupied; port 5173 was the endpoint checked by the preflight. This manually confirms local registration and login; it does not establish production readiness.
 
 - On 2026-11-06, reran acceptance on the current committed tree: `scripts/test.ps1` migrated a new empty PostgreSQL database and passed 98/98 backend tests; frontend tests passed 29/29; `npm run build` succeeded. The existing Vite-served API remains an older process and is not represented by this fresh-process backend result; the preflight identifies its stale listener PID and gives the restart instruction.
