@@ -15,6 +15,6 @@ The repository is public. Commit source and safe environment templates only; nev
 ## Current remote state
 
 - Active branch: `codex/lossfit-verification`.
-- Latest verified code milestone: commit `2bf70b4` (assistant outage retry browser flow), with hosted CI run [42288650001](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42288650001) passing all four jobs.
-- Latest evidence commit: `b939335`, with hosted CI run [42289219529](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42289219529) passing all four jobs.
+- Latest verified code milestone: commit `e4c1076` (Windows development server port selection), with hosted CI run [42293832637](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42293832637) passing all four jobs.
+- Latest evidence commit: `65f70d6`, with hosted CI run [42292683632](https://github.com/newsurvey0098-blip/LossFit/actions/runs/42292683632) passing all four jobs.
 - Vercel Production deployment remains at baseline commit `fa13142`; no new deployment was created for these verification-branch pushes.
