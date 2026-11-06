@@ -39,15 +39,19 @@ def test_model_water_proposal_is_persisted_but_requires_confirm_and_retry_is_saf
 def test_model_meal_resolves_search_ids_and_server_nutrition(monkeypatch):
     messages=[];requests=provider(monkeypatch,messages)
     with TestClient(main.app) as client:
-        h,c=setup(client);food=client.post('/api/v1/foods',headers=h,json={'name':'Tool cooked lentils','state':'cooked','kcal':116}).json()
-        messages.extend([tool('search_foods',{'query':'Tool cooked lentils'}),tool('propose_meal',{'name':'Lentils','meal_type':'lunch','items':[{'food_id':food['id'],'grams':150}]})])
-        response=client.post('/api/v1/assistant',headers=h,json={'conversation_id':c,'message':'Log 150 grams of my cooked lentils for lunch','idempotency_key':uuid4().hex})
+        h,c=setup(client)
+        lentils=client.post('/api/v1/foods',headers=h,json={'name':'Tool cooked lentils','state':'cooked','kcal':116}).json()
+        rice=client.post('/api/v1/foods',headers=h,json={'name':'Tool cooked brown rice','state':'cooked','kcal':130}).json()
+        messages.extend([tool('search_foods',{'query':'Tool cooked'}),tool('propose_meal',{'name':'Lentils and rice','meal_type':'lunch','items':[{'food_id':lentils['id'],'grams':150},{'food_id':rice['id'],'grams':100}]})])
+        response=client.post('/api/v1/assistant',headers=h,json={'conversation_id':c,'message':'Log 150 grams of cooked lentils and 100 grams of cooked brown rice for lunch','idempotency_key':uuid4().hex})
         assert response.status_code==200
         assert len(requests)==2 and requests[1]['messages'][-1]['role']=='tool'
         proposal=client.get(f'/api/v1/assistant/conversations/{c}').json()['proposals'][0]
-        assert proposal['preview']['totals']['kcal']==174 and client.get('/api/v1/meals').json()==[]
+        assert len(proposal['preview']['items'])==2
+        assert proposal['preview']['totals']['kcal']==304 and client.get('/api/v1/meals').json()==[]
         assert client.post(f"/api/v1/assistant/actions/{proposal['id']}/confirm",headers=h).status_code==200
-        assert client.get('/api/v1/meals').json()[0]['kcal']==174
+        meal=client.get('/api/v1/meals').json()[0]
+        assert meal['kcal']==304 and len(meal['items'])==2
 
 def test_invalid_tool_output_cannot_create_actions_or_chat_messages(monkeypatch):
     messages=[];provider(monkeypatch,messages)
